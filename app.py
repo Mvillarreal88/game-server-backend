@@ -5,8 +5,8 @@ import os
 from dotenv import load_dotenv
 
 # Load environment variables from .env file (for local development)
-load_dotenv()
-
+load_dotenv(dotenv_path='.env')  # Specify the .env file path
+print("Loaded Subscription ID:", os.getenv("AZURE_SUBSCRIPTION_ID"))
 # Initialize Flask app
 app = Flask(__name__)
 

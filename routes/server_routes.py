@@ -5,7 +5,7 @@ server_routes = Blueprint("server_routes", __name__)
 
 # Example Game Configuration (mocked; replace with DB lookup later)
 GAME_PACKAGES = {
-    "minecraft": {
+    "standard": {
         "cpu": 2000,  # 2 cores
         "memory": 6144,  # 6 GB in MiB
         "image": "gameregistry.azurecr.io/minecraft-server:latest",
@@ -14,16 +14,16 @@ GAME_PACKAGES = {
             "EULA": "TRUE",
             "MEMORY": "5G",
             "SERVER_NAME": "Azure Test Minecraft Server",
-        },
-        "volume": {
-            "name": "data-volume",
-            "mount_path": "/data",
-            "azure_file": {
-                "secretName": "azure-secret",  # Secret storing account key
-                "shareName": "data",  # File share name
-                "readOnly": False
-            }
         }
+        # "volume": {
+        #     "name": "data-volume",
+        #     "mount_path": "/data",
+        #     "azure_file": {
+        #         "secretName": "azure-secret",  # Secret storing account key
+        #         "shareName": "data",  # File share name
+        #         "readOnly": False
+        #     }
+        # }
     }
 }
 
