@@ -3,17 +3,24 @@ from azure.identity import DefaultAzureCredential
 from azure.mgmt.containerinstance import ContainerInstanceManagementClient
 import os
 from dotenv import load_dotenv
+# Explicitly load the .env file from the current directory
+dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
 
-# Load environment variables from .env file (for local development)
-load_dotenv(dotenv_path='.env')  # Specify the .env file path
-print("Loaded Subscription ID:", os.getenv("AZURE_SUBSCRIPTION_ID"))
+load_dotenv(dotenv_path)
+
+print(f"Loaded Subscription ID: {os.getenv('AZURE_SUBSCRIPTION_ID')}")
+print(f"Loaded Resource Group: {os.getenv('AZURE_RESOURCE_GROUP_NAME')}")
+
+
+# # Load environment variables from .env file (for local development)
+# load_dotenv(dotenv_path='.env')  # Specify the .env file path
 # Initialize Flask app
 app = Flask(__name__)
 
 # Azure SDK setup
 credential = DefaultAzureCredential()
 subscription_id = os.getenv("AZURE_SUBSCRIPTION_ID")
-resource_group_name = os.getenv("AZURE_RESOURCE_GROUP")
+resource_group_name = os.getenv("AZURE_RESOURCE_GROUP_NAME")
 client = ContainerInstanceManagementClient(credential, subscription_id)
 
 # API Endpoint: Start a game server
