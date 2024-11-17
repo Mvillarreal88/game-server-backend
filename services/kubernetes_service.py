@@ -3,6 +3,8 @@ from kubernetes import client, config
 import os
 from kubernetes.utils import create_from_yaml
 from utils.kubernetes_deployment_builder import KubernetesDeploymentBuilder
+import ssl
+import certifi
 
 class KubernetesService:
     def __init__(self):
@@ -24,17 +26,25 @@ class KubernetesService:
                 configuration.api_key = {"authorization": f"Bearer {token}"}
                 configuration.api_key_prefix = {"authorization": "Bearer"}
                 
-                # Disable SSL verification for now
-                configuration.verify_ssl = False
+                # Configure SSL context properly
+                configuration.ssl_ca_cert = certifi.where()
+                configuration.verify_ssl = True
+                
+                # If you need to debug SSL issues, you can enable these:
+                configuration.debug = True
+                configuration.assert_hostname = False
                 
                 client.Configuration.set_default(configuration)
             
-            # Initialize the API client
+            # Initialize the API client with SSL configuration
             self.api_client = client.ApiClient()
             self.core_v1 = client.CoreV1Api()
             self.apps_v1 = client.AppsV1Api()
             
+            # Test the connection by listing namespaces
+            self.core_v1.list_namespace(_preload_content=False)
             print("Successfully initialized Kubernetes client")
+            
         except Exception as e:
             print(f"Error initializing Kubernetes client: {str(e)}")
             raise
