@@ -17,6 +17,10 @@ load_dotenv(dotenv_path)
 
 def init_kubernetes():
     try:
+        # Check if we're running in Azure (presence of WEBSITE_INSTANCE_ID indicates Azure App Service)
+        in_azure = os.getenv('WEBSITE_INSTANCE_ID') is not None
+        logger.info(f"Running in Azure: {in_azure}")
+
         # Check for base64 encoded config in environment
         kube_config_content = os.getenv('KUBECONFIG_CONTENT')
         if kube_config_content:
@@ -43,9 +47,19 @@ def init_kubernetes():
                 logger.error(f"Error loading provided kubeconfig: {str(e)}")
                 return False
         
-        # If no KUBECONFIG_CONTENT, try loading from default location (for local development)
+        # If no KUBECONFIG_CONTENT, try loading from default location
         logger.info("Attempting to load kubeconfig from default location...")
-        config.load_kube_config()
+        if in_azure:
+            # In Azure, use MSI-configured kubeconfig
+            config.load_kube_config()
+        else:
+            # Locally, use device code auth
+            config.load_kube_config(context="GameServerClusterProd")
+            
+        # Test the configuration
+        v1 = client.CoreV1Api()
+        v1.list_namespace()
+        logger.info("Successfully initialized Kubernetes client")
         return True
         
     except Exception as e:
