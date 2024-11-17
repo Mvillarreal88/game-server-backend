@@ -11,17 +11,21 @@ class KubernetesService:
             try:
                 config.load_kube_config()
             except:
-                # If that fails, use Azure managed identity
+                print("Local config failed, using Managed Identity...")
+                # Use Managed Identity for authentication
                 credential = DefaultAzureCredential()
                 configuration = client.Configuration()
                 
-                # Hardcode the AKS server URL
+                # AKS cluster endpoint
                 configuration.host = "https://gameserverclusterprod-dns-o0owfoer.hcp.eastus.azmk8s.io:443"
                 
-                # Get token from Azure credential
+                # Get token from Managed Identity
                 token = credential.get_token("https://management.azure.com/.default").token
                 configuration.api_key = {"authorization": f"Bearer {token}"}
                 configuration.api_key_prefix = {"authorization": "Bearer"}
+                
+                # Trust AKS server certificate
+                configuration.verify_ssl = False  # Temporarily disable SSL verification
                 
                 client.Configuration.set_default(configuration)
             
