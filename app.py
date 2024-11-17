@@ -5,6 +5,10 @@ import os
 from dotenv import load_dotenv
 from routes import api
 import logging
+from kubernetes import config, client
+from kubernetes.client import ApiClient
+import base64
+import tempfile
 
 # Explicitly load the .env file from the current directory
 dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
@@ -64,6 +68,91 @@ def server_status(server_id):
         return jsonify({"status": result.instance_view.state}), 200
     except Exception as e:
         return jsonify({"error": f"Failed to get server status: {str(e)}"}), 500
+
+def init_kubernetes():
+    try:
+        # Check for base64 encoded config in environment
+        kube_config_content = os.getenv('KUBECONFIG_CONTENT')
+        if kube_config_content:
+            logger.info("Found KUBECONFIG_CONTENT, attempting to use it...")
+            try:
+                # Decode and save to temp file
+                config_data = base64.b64decode(kube_config_content)
+                
+                # Create a temporary file that will be automatically cleaned up
+                with tempfile.NamedTemporaryFile(delete=False) as temp_config:
+                    temp_config.write(config_data)
+                    temp_config_path = temp_config.name
+                
+                # Load the config from our temporary file
+                config.load_kube_config(config_file=temp_config_path)
+                
+                # Test the configuration
+                v1 = client.CoreV1Api()
+                v1.list_namespace()
+                
+                logger.info("Successfully initialized Kubernetes client with provided config")
+                return True
+                
+            except Exception as e:
+                logger.error(f"Error loading provided kubeconfig: {str(e)}")
+                return False
+                
+        logger.info("No KUBECONFIG_CONTENT found, trying default config locations...")
+        # Try loading from default location
+        config.load_kube_config()
+        logger.info("Successfully loaded config from default location")
+        return True
+        
+    except Exception as e:
+        logger.warning(f"Could not load kube config from default location: {str(e)}")
+        try:
+            # Try loading from in-cluster config (when running in a pod)
+            config.load_incluster_config()
+            logger.info("Successfully loaded in-cluster config")
+            return True
+        except Exception as e:
+            logger.error(f"Could not load any Kubernetes config: {str(e)}")
+            return False
+
+@app.route('/health')
+def health_check():
+    return jsonify({"status": "healthy"}), 200
+
+@app.route('/api/start', methods=['POST'])
+def start_server():
+    try:
+        if not init_kubernetes():
+            return jsonify({
+                "status": "error",
+                "message": "Could not initialize Kubernetes client. Check logs for details."
+            }), 503
+
+        # Test the connection
+        try:
+            v1 = client.CoreV1Api()
+            namespaces = v1.list_namespace()
+            logger.info(f"Successfully connected to Kubernetes. Found {len(namespaces.items)} namespaces.")
+            
+            return jsonify({
+                "status": "success",
+                "message": "Kubernetes client initialized successfully",
+                "namespace_count": len(namespaces.items)
+            }), 200
+            
+        except Exception as e:
+            logger.error(f"Error testing Kubernetes connection: {str(e)}")
+            return jsonify({
+                "status": "error",
+                "message": f"Could not connect to Kubernetes cluster: {str(e)}"
+            }), 503
+
+    except Exception as e:
+        logger.error(f"Error in start_server: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": f"Internal server error: {str(e)}"
+        }), 500
 
 # Start the Flask server
 if __name__ == '__main__':
