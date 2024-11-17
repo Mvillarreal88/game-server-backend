@@ -15,8 +15,8 @@ class KubernetesService:
                 credential = DefaultAzureCredential()
                 configuration = client.Configuration()
                 
-                # Get these values from your App Settings
-                configuration.host = os.getenv('KUBE_HOST')  # Your AKS API server endpoint
+                # Hardcode the AKS server URL
+                configuration.host = "https://gameserverclusterprod-dns-o0owfoer.hcp.eastus.azmk8s.io:443"
                 
                 # Get token from Azure credential
                 token = credential.get_token("https://management.azure.com/.default").token
@@ -35,13 +35,13 @@ class KubernetesService:
             print(f"Error initializing Kubernetes client: {str(e)}")
             raise
 
-    @staticmethod
-    def deploy_game_server(server_id, namespace, image, cpu, memory, port, env_vars, volume=None):
+    @classmethod
+    def deploy_game_server(cls, server_id, namespace, image, cpu, memory, port, env_vars, volume=None):
         """
         Deploy a game server dynamically using provided parameters.
         """
-        # Load Kubernetes configuration
-        config.load_kube_config()
+        # Create an instance to use the initialized client
+        service = cls()
 
         # Generate deployment YAML dynamically
         deployment_yaml = KubernetesDeploymentBuilder.generate_yaml(
@@ -55,8 +55,6 @@ class KubernetesService:
             volume=volume
         )
 
-        # Apply the deployment
-        api_client = client.ApiClient()
-        create_from_yaml(api_client, yaml_objects=[deployment_yaml], namespace=namespace)
-
+        # Apply the deployment using the existing client
+        create_from_yaml(service.api_client, yaml_objects=[deployment_yaml], namespace=namespace)
         print(f"Deployment {server_id} applied successfully.")
