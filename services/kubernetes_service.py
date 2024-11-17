@@ -19,13 +19,13 @@ class KubernetesService:
                 # AKS cluster endpoint
                 configuration.host = "https://gameserverclusterprod-dns-o0owfoer.hcp.eastus.azmk8s.io:443"
                 
-                # Get token from Managed Identity
-                token = credential.get_token("https://management.azure.com/.default").token
+                # Get token with correct AKS scope
+                token = credential.get_token("https://aks.azure.com/.default").token
                 configuration.api_key = {"authorization": f"Bearer {token}"}
                 configuration.api_key_prefix = {"authorization": "Bearer"}
                 
-                # Trust AKS server certificate
-                configuration.verify_ssl = False  # Temporarily disable SSL verification
+                # Disable SSL verification for now
+                configuration.verify_ssl = False
                 
                 client.Configuration.set_default(configuration)
             
