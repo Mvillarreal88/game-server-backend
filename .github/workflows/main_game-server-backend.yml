@@ -30,7 +30,20 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
         
-      # Optional: Add step to run tests here (PyTest, Django test suites, etc.)
+      - name: Install Azure CLI and kubectl
+        run: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          az aks install-cli
+          
+      - name: Install kubelogin
+        run: |
+          az aks install-cli
+
+      # Optional: Add step to run tests here
+      # - name: Run tests
+      #   run: |
+      #     pip install pytest
+      #     pytest
 
       - name: Zip artifact for deployment
         run: zip release.zip ./* -r
@@ -60,7 +73,6 @@ jobs:
 
       - name: Unzip artifact for deployment
         run: unzip release.zip
-
       
       - name: Login to Azure
         uses: azure/login@v2
