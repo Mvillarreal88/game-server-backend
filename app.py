@@ -4,6 +4,7 @@ from azure.mgmt.containerinstance import ContainerInstanceManagementClient
 import os
 from dotenv import load_dotenv
 from routes import api
+import logging
 
 # Explicitly load the .env file from the current directory
 dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
@@ -26,12 +27,17 @@ app.register_blueprint(api)
 
 # Legacy ACI Endpoints
 # API Endpoint: Start a game server
-@app.route('/start-server', methods=['POST'])
+@app.route('/api/server/start-server', methods=['POST'])
 def start_server():
-    data = request.json
-    server_id = data.get('server_id')
-    game = data.get('game')
+    logger = logging.getLogger(__name__)
+    logger.info("=== Start Server Request Received ===")
     try:
+        logger.info(f"KUBECONFIG path: {os.getenv('KUBECONFIG')}")
+        logger.info(f"Config exists: {os.path.exists(os.getenv('KUBECONFIG'))}")
+        logger.info("Creating container group...")
+        data = request.json
+        server_id = data.get('server_id')
+        game = data.get('game')
         client.container_groups.begin_start(resource_group_name, server_id).wait()
         return jsonify({"message": f"Server {server_id} for {game} is starting..."}), 200
     except Exception as e:
