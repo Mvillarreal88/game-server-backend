@@ -67,5 +67,8 @@ def server_status(server_id):
 
 # Start the Flask server
 if __name__ == '__main__':
-    port = int(os.getenv("PORT", 5000))
+    # Get port from environment variable or default to 8000
+    port = int(os.getenv('PORT', 8000))
+    logger = logging.getLogger(__name__)
+    logger.info(f"Starting server on port {port}")
     app.run(host='0.0.0.0', port=port)
