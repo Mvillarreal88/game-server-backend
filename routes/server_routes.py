@@ -48,7 +48,8 @@ def start_server():
             image=config["image"],
             cpu=config["cpu"],
             memory=config["memory"],
-            port=config["port"]
+            port=config["port"],
+            env_vars=config["env_vars"]
         )
         return jsonify({"message": f"Server {server_id} for package {package} is starting..."}), 200
     except Exception as e:

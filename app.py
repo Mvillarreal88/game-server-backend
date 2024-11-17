@@ -3,17 +3,15 @@ from azure.identity import DefaultAzureCredential
 from azure.mgmt.containerinstance import ContainerInstanceManagementClient
 import os
 from dotenv import load_dotenv
+from routes import api
+
 # Explicitly load the .env file from the current directory
 dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
-
 load_dotenv(dotenv_path)
 
 print(f"Loaded Subscription ID: {os.getenv('AZURE_SUBSCRIPTION_ID')}")
 print(f"Loaded Resource Group: {os.getenv('AZURE_RESOURCE_GROUP_NAME')}")
 
-
-# # Load environment variables from .env file (for local development)
-# load_dotenv(dotenv_path='.env')  # Specify the .env file path
 # Initialize Flask app
 app = Flask(__name__)
 
@@ -23,13 +21,16 @@ subscription_id = os.getenv("AZURE_SUBSCRIPTION_ID")
 resource_group_name = os.getenv("AZURE_RESOURCE_GROUP_NAME")
 client = ContainerInstanceManagementClient(credential, subscription_id)
 
+# Register the API blueprint for Kubernetes-based deployments
+app.register_blueprint(api)
+
+# Legacy ACI Endpoints
 # API Endpoint: Start a game server
 @app.route('/start-server', methods=['POST'])
 def start_server():
     data = request.json
     server_id = data.get('server_id')
     game = data.get('game')
-
     try:
         client.container_groups.begin_start(resource_group_name, server_id).wait()
         return jsonify({"message": f"Server {server_id} for {game} is starting..."}), 200
