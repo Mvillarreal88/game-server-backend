@@ -3,6 +3,6 @@ azure-identity
 azure-mgmt-containerinstance
 python-dotenv
 kubernetes==26.1.0
-pyyaml==6.0
+pyyaml==6.0.1
 pytest
 pytest-cov
