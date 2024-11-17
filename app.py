@@ -17,43 +17,27 @@ load_dotenv(dotenv_path)
 
 def init_kubernetes():
     try:
-        # Check if we're running in Azure (presence of WEBSITE_INSTANCE_ID indicates Azure App Service)
+        # Check if we're running in Azure
         in_azure = os.getenv('WEBSITE_INSTANCE_ID') is not None
         logger.info(f"Running in Azure: {in_azure}")
 
-        # Check for base64 encoded config in environment
-        kube_config_content = os.getenv('KUBECONFIG_CONTENT')
-        if kube_config_content:
-            logger.info("Found KUBECONFIG_CONTENT, attempting to use it...")
-            try:
-                # Decode and save to temp file
-                config_data = base64.b64decode(kube_config_content)
-                
-                with tempfile.NamedTemporaryFile(delete=False) as temp_config:
-                    temp_config.write(config_data)
-                    temp_config_path = temp_config.name
-                
-                # Load the config
-                config.load_kube_config(config_file=temp_config_path)
-                
-                # Test the configuration
-                v1 = client.CoreV1Api()
-                v1.list_namespace()
-                
-                logger.info("Successfully initialized Kubernetes client")
-                return True
-                
-            except Exception as e:
-                logger.error(f"Error loading provided kubeconfig: {str(e)}")
-                return False
-        
-        # If no KUBECONFIG_CONTENT, try loading from default location
-        logger.info("Attempting to load kubeconfig from default location...")
         if in_azure:
-            # In Azure, use MSI-configured kubeconfig
-            config.load_kube_config()
+            # Use DefaultAzureCredential for managed identity
+            from azure.identity import DefaultAzureCredential
+            credential = DefaultAzureCredential()
+            
+            # Configure Kubernetes client
+            configuration = client.Configuration()
+            configuration.host = "https://gameserverclusterprod-dns-o0owfoer.hcp.eastus.azmk8s.io:443"
+            
+            # Get token from Azure credential
+            token = credential.get_token("https://management.azure.com/.default").token
+            configuration.api_key = {"authorization": f"Bearer {token}"}
+            configuration.api_key_prefix = {"authorization": "Bearer"}
+            
+            client.Configuration.set_default(configuration)
         else:
-            # Locally, use device code auth
+            # Local development - use kubeconfig
             config.load_kube_config(context="GameServerClusterProd")
             
         # Test the configuration
