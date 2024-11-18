@@ -23,17 +23,16 @@ class KubernetesService:
                     print("Using Managed Identity...")
                 
                 configuration = client.Configuration()
-                
-                # Update just the host to match your AKS FQDN
                 configuration.host = f"https://gameserverclusterprod-dns-o0owfoer.hcp.eastus.azmk8s.io"
                 
-                # Keep the existing token logic since it's working
+                # Get token and add debug logging
+                print("Getting token...")
                 token = credential.get_token("https://management.azure.com/.default").token
+                print(f"Token length: {len(token)}")  # Don't log the actual token
                 print("Token acquired successfully")
                 
-                # Rest of the configuration
-                configuration.verify_ssl = False
-                configuration.ssl_ca_cert = None
+                # Set up the configuration
+                configuration.verify_ssl = False  # Keep this for now until auth is working
                 configuration.api_key = {"authorization": f"Bearer {token}"}
                 configuration.api_key_prefix = {"authorization": "Bearer"}
                 
@@ -46,6 +45,20 @@ class KubernetesService:
             
             print("Successfully initialized Kubernetes client")
             
+            # Test the connection and print more details
+            try:
+                print("Testing connection to cluster...")
+                namespaces = self.core_v1.list_namespace()
+                print(f"Successfully connected to Kubernetes cluster. Found {len(namespaces.items)} namespaces")
+                for ns in namespaces.items:
+                    print(f"Found namespace: {ns.metadata.name}")
+            except Exception as e:
+                print(f"Failed to list namespaces: {str(e)}")
+                print(f"Error type: {type(e)}")
+                if hasattr(e, 'status') and hasattr(e.status, 'message'):
+                    print(f"Status message: {e.status.message}")
+                raise
+                
         except Exception as e:
             print(f"Error initializing Kubernetes client: {str(e)}")
             raise
