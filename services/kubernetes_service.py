@@ -2,9 +2,9 @@ from azure.identity import DefaultAzureCredential
 from kubernetes import client, config
 import os
 from kubernetes.utils import create_from_yaml
-from utils.kubernetes_deployment_builder import KubernetesDeploymentBuilder
 import ssl
 import certifi
+from utils.kubernetes_deployment_builder import KubernetesDeploymentBuilder
 
 class KubernetesService:
     def __init__(self):
@@ -26,22 +26,18 @@ class KubernetesService:
                 configuration.api_key = {"authorization": f"Bearer {token}"}
                 configuration.api_key_prefix = {"authorization": "Bearer"}
                 
-                # Configure SSL context properly
-                configuration.ssl_ca_cert = certifi.where()
-                configuration.verify_ssl = True
-                
-                # If you need to debug SSL issues, you can enable these:
-                configuration.debug = True
-                configuration.assert_hostname = False
+                # Use Azure's built-in certificate store
+                configuration.ssl_ca_cert = None  # Let the system use Azure's cert store
+                configuration.verify_ssl = True   # Keep SSL verification enabled
                 
                 client.Configuration.set_default(configuration)
             
-            # Initialize the API client with SSL configuration
+            # Initialize API clients
             self.api_client = client.ApiClient()
             self.core_v1 = client.CoreV1Api()
             self.apps_v1 = client.AppsV1Api()
             
-            # Test the connection by listing namespaces
+            # Test the connection
             self.core_v1.list_namespace(_preload_content=False)
             print("Successfully initialized Kubernetes client")
             
