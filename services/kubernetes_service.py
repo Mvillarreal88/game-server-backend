@@ -23,12 +23,15 @@ class KubernetesService:
                     print("Using Managed Identity...")
                 
                 configuration = client.Configuration()
-                configuration.host = "https://gameserverclusterprod-dns-o0owfoer.hcp.eastus.azmk8s.io:443"
                 
-                # Get token from credential
+                # Update just the host to match your AKS FQDN
+                configuration.host = f"https://gameserverclusterprod-dns-o0owfoer.hcp.eastus.azmk8s.io"
+                
+                # Keep the existing token logic since it's working
                 token = credential.get_token("https://management.azure.com/.default").token
+                print("Token acquired successfully")
                 
-                # Set up the configuration
+                # Rest of the configuration
                 configuration.verify_ssl = False
                 configuration.ssl_ca_cert = None
                 configuration.api_key = {"authorization": f"Bearer {token}"}
