@@ -34,6 +34,7 @@ class KubernetesService:
                 
                 token = credential.get_token("https://management.azure.com/.default")
                 logger.info("Token received (length: %d)", len(token.token))
+                logger.info("Token type: %s", token.token[:20] + "...")
                 
                 configuration = client.Configuration()
                 configuration.host = self.cluster_url
@@ -50,6 +51,7 @@ class KubernetesService:
             logger.info("Successfully connected to Kubernetes cluster")
             
         except Exception as e:
+            logger.error(f"Error type: {type(e)}")
             logger.error(f"Error initializing Kubernetes client: {str(e)}")
             raise
 
