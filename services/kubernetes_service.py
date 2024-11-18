@@ -1,4 +1,4 @@
-from azure.identity import DefaultAzureCredential
+from azure.identity import DefaultAzureCredential, AzureCliCredential
 from kubernetes import client, config
 import os
 from kubernetes.utils import create_from_yaml
@@ -7,25 +7,32 @@ from utils.kubernetes_deployment_builder import KubernetesDeploymentBuilder
 class KubernetesService:
     def __init__(self):
         try:
-            # Try to load from kubeconfig first (for local development)
+            # Try to load from kubeconfig first
             try:
                 config.load_kube_config()
-            except:
-                print("Local config failed, using Managed Identity...")
-                # Use Managed Identity for authentication
-                credential = DefaultAzureCredential()
-                configuration = client.Configuration()
+                print("Using local kubeconfig...")
                 
-                # AKS cluster endpoint
+            except:
+                print("Local config failed, using Azure credentials...")
+                # Choose credential based on environment
+                if os.getenv("ENVIRONMENT") == "local":
+                    credential = AzureCliCredential()
+                    print("Using Azure CLI credentials...")
+                else:
+                    credential = DefaultAzureCredential()
+                    print("Using Managed Identity...")
+                
+                configuration = client.Configuration()
                 configuration.host = "https://gameserverclusterprod-dns-o0owfoer.hcp.eastus.azmk8s.io:443"
                 
-                # Get token from Managed Identity
+                # Get token from credential
                 token = credential.get_token("https://management.azure.com/.default").token
+                
+                # Set up the configuration
+                configuration.verify_ssl = False
+                configuration.ssl_ca_cert = None
                 configuration.api_key = {"authorization": f"Bearer {token}"}
                 configuration.api_key_prefix = {"authorization": "Bearer"}
-                
-                # Trust AKS server certificate
-                configuration.verify_ssl = False  # Temporarily disable SSL verification
                 
                 client.Configuration.set_default(configuration)
             
@@ -35,6 +42,7 @@ class KubernetesService:
             self.apps_v1 = client.AppsV1Api()
             
             print("Successfully initialized Kubernetes client")
+            
         except Exception as e:
             print(f"Error initializing Kubernetes client: {str(e)}")
             raise
