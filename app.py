@@ -22,6 +22,21 @@ app = Flask(__name__)
 # Register the API blueprint
 app.register_blueprint(api)
 
+# Add this at the top with your other imports
+GAME_PACKAGES = {
+    "standard": {
+        "cpu": 2000,  # 2 cores
+        "memory": 6144,  # 6 GB in MiB
+        "image": "gameregistry.azurecr.io/minecraft-server:latest",
+        "port": 25565,
+        "env_vars": {
+            "EULA": "TRUE",
+            "MEMORY": "5G",
+            "SERVER_NAME": "Azure Test Minecraft Server",
+        }
+    }
+}
+
 @app.route('/api/server/start-server', methods=['POST'])
 def start_server():
     """Start a new game server instance"""
@@ -35,12 +50,22 @@ def start_server():
             logger.error("No JSON data received")
             return jsonify({"error": "No data provided"}), 400
             
+        package = data.get('package')
         server_id = data.get('server_id')
-        game = data.get('game')
+        namespace = data.get('namespace', 'default')
         
-        if not server_id or not game:
+        if not package or not server_id:
             logger.error("Missing required fields")
-            return jsonify({"error": "server_id and game are required"}), 400
+            return jsonify({"error": "package and server_id are required"}), 400
+            
+        # Validate package
+        if package not in GAME_PACKAGES:
+            logger.error(f"Invalid package: {package}")
+            return jsonify({"error": f"Invalid package: {package}"}), 400
+            
+        # Get package configuration
+        config = GAME_PACKAGES[package]
+        logger.info(f"Using package configuration: {config}")
             
         # Initialize Kubernetes service
         try:
@@ -56,18 +81,21 @@ def start_server():
         try:
             namespaces = k8s_service.core_v1.list_namespace()
             logger.info(f"Connected to cluster. Found {len(namespaces.items)} namespaces")
+            
+            return jsonify({
+                "message": f"Server {server_id} for package {package} is starting...",
+                "namespace": namespace,
+                "config": config,
+                "namespace_count": len(namespaces.items),
+                "environment": "production" if os.getenv('WEBSITE_SITE_NAME') else "development"
+            }), 200
+            
         except Exception as namespace_error:
             logger.error(f"Failed to list namespaces: {str(namespace_error)}")
             return jsonify({
                 "error": "Failed to access Kubernetes cluster",
                 "details": str(namespace_error)
             }), 500
-        
-        return jsonify({
-            "message": f"Server {server_id} for {game} is starting...",
-            "namespace_count": len(namespaces.items),
-            "environment": "production" if os.getenv('WEBSITE_SITE_NAME') else "development"
-        }), 200
         
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
