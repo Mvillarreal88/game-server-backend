@@ -26,10 +26,9 @@ class KubernetesService:
                 configuration.api_key = {"authorization": f"Bearer {token}"}
                 configuration.api_key_prefix = {"authorization": "Bearer"}
                 
-                # Use Azure's built-in certificate store
-                configuration.ssl_ca_cert = None  # Let the system use Azure's cert store
-                configuration.verify_ssl = True   # Keep SSL verification enabled
-                
+                # Set up SSL configuration
+                ssl_context = ssl.create_default_context(cafile=certifi.where())
+                configuration.ssl_context = ssl_context
                 client.Configuration.set_default(configuration)
             
             # Initialize API clients
