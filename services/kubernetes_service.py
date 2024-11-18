@@ -13,68 +13,42 @@ class KubernetesService:
             logger = logging.getLogger(__name__)
             logger.info("Initializing KubernetesService...")
             
-            # Log environment variables (safely)
-            subscription_id = os.getenv("AZURE_SUBSCRIPTION_ID", "Not Set")
-            resource_group = os.getenv("AZURE_RESOURCE_GROUP_NAME", "Not Set")
-            cluster_name = os.getenv("AKS_CLUSTER_NAME", "Not Set")
-            
-            logger.info(f"Using Subscription: {subscription_id}")
-            logger.info(f"Resource Group: {resource_group}")
-            logger.info(f"Cluster Name: {cluster_name}")
-            
-            # Add these constants
-            self.AKS_RESOURCE_ID = "6dae42f8-4368-4678-94ff-3960e28e3630"
+            self.subscription_id = "8c4ca0fa-4be5-467a-b493-72094f192334"
+            self.resource_group = "GameServerRG"
+            self.cluster_name = "gameserverclusterprod"
             self.cluster_url = "https://gameserverclusterprod-dns-o0owfoer.hcp.eastus.azmk8s.io"
             
-            # Try to load from kubeconfig first
+            logger.info(f"Using Subscription: {self.subscription_id}")
+            logger.info(f"Resource Group: {self.resource_group}")
+            logger.info(f"Cluster Name: {self.cluster_name}")
+            
             try:
                 config.load_kube_config()
                 logger.info("Successfully loaded local kubeconfig")
-                
             except Exception as config_error:
                 logger.warning(f"Local config failed: {str(config_error)}")
                 logger.info("Falling back to Azure credentials...")
                 
-                # Choose credential based on environment
-                if os.getenv("ENVIRONMENT") == "local":
-                    credential = AzureCliCredential()
-                    logger.info("Using Azure CLI credentials")
-                else:
-                    credential = DefaultAzureCredential()
-                    logger.info("Using Managed Identity")
+                credential = DefaultAzureCredential()
+                logger.info("Using Managed Identity")
+                
+                token = credential.get_token("https://management.azure.com/.default")
+                logger.info("Token received (length: %d)", len(token.token))
                 
                 configuration = client.Configuration()
                 configuration.host = self.cluster_url
-                logger.info(f"Connecting to cluster at: {self.cluster_url}")
-                
-                # Get token with specific scope for AKS
-                logger.info("Requesting token...")
-                token = credential.get_token("https://management.azure.com/.default").token
-                logger.info(f"Token received (length: {len(token)})")
-                
-                configuration.verify_ssl = False  # TODO: Enable SSL verification in production
-                configuration.api_key = {"authorization": f"Bearer {token}"}
-                configuration.api_key_prefix = {"authorization": "Bearer"}
+                configuration.api_key = {"authorization": f"Bearer {token.token}"}
+                configuration.verify_ssl = False
                 
                 client.Configuration.set_default(configuration)
-            
-            # Initialize the API client
-            self.core_v1 = client.CoreV1Api()
-            
-            # Test the connection
-            logger.info("Testing cluster connection...")
-            try:
-                namespaces = self.core_v1.list_namespace()
-                logger.info(f"Successfully connected to Kubernetes cluster. Found {len(namespaces.items)} namespaces")
-                for ns in namespaces.items:
-                    logger.info(f"Found namespace: {ns.metadata.name}")
-            except Exception as e:
-                logger.error(f"Failed to list namespaces: {str(e)}")
-                logger.error(f"Error type: {type(e)}")
-                if hasattr(e, 'status') and hasattr(e.status, 'message'):
-                    logger.error(f"Status message: {e.status.message}")
-                raise
                 
+            self.core_api = client.CoreV1Api()
+            self.apps_api = client.AppsV1Api()
+            
+            logger.info("Testing cluster connection...")
+            self.core_api.list_namespace()
+            logger.info("Successfully connected to Kubernetes cluster")
+            
         except Exception as e:
             logger.error(f"Error initializing Kubernetes client: {str(e)}")
             raise
