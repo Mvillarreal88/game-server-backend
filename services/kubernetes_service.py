@@ -5,6 +5,8 @@ from kubernetes.utils import create_from_yaml
 from utils.kubernetes_deployment_builder import KubernetesDeploymentBuilder
 import logging
 
+logging.getLogger('kubernetes').setLevel(logging.DEBUG)
+
 class KubernetesService:
     def __init__(self):
         try:
@@ -19,6 +21,10 @@ class KubernetesService:
             logger.info(f"Using Subscription: {subscription_id}")
             logger.info(f"Resource Group: {resource_group}")
             logger.info(f"Cluster Name: {cluster_name}")
+            
+            # Add these constants
+            self.AKS_RESOURCE_ID = "6dae42f8-4368-4678-94ff-3960e28e3630"
+            self.cluster_url = "https://gameserverclusterprod-dns-o0owfoer.hcp.eastus.azmk8s.io"
             
             # Try to load from kubeconfig first
             try:
@@ -38,9 +44,8 @@ class KubernetesService:
                     logger.info("Using Managed Identity")
                 
                 configuration = client.Configuration()
-                cluster_url = f"https://gameserverclusterprod-dns-o0owfoer.hcp.eastus.azmk8s.io"
-                configuration.host = cluster_url
-                logger.info(f"Connecting to cluster at: {cluster_url}")
+                configuration.host = self.cluster_url
+                logger.info(f"Connecting to cluster at: {self.cluster_url}")
                 
                 # Get token with specific scope for AKS
                 logger.info("Requesting token...")
