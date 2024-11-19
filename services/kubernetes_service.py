@@ -6,6 +6,8 @@ from utils.kubernetes_deployment_builder import KubernetesDeploymentBuilder
 import logging
 from azure.mgmt.containerinstance import ContainerInstanceManagementClient
 
+# Set up logging
+logger = logging.getLogger(__name__)
 logging.getLogger('kubernetes').setLevel(logging.DEBUG)
 
 class KubernetesService:

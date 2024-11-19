@@ -7,6 +7,7 @@ from kubernetes import config, client
 import base64
 import tempfile
 from services.kubernetes_service import KubernetesService
+from routes.server_routes import GAME_PACKAGES
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
