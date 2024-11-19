@@ -8,3 +8,4 @@ pytest
 pytest-cov
 certifi>=2023.7.22
 azure-mgmt-containerservice>=20.0.0
+python-jose>=3.3.0
