@@ -21,22 +21,7 @@ app = Flask(__name__)
 
 # Register the API blueprint
 app.register_blueprint(api)
-
-# Add this at the top with your other imports
-GAME_PACKAGES = {
-    "standard": {
-        "cpu": 2000,  # 2 cores
-        "memory": 6144,  # 6 GB in MiB
-        "image": "gameregistry.azurecr.io/minecraft-server:latest",
-        "port": 25565,
-        "env_vars": {
-            "EULA": "TRUE",
-            "MEMORY": "5G",
-            "SERVER_NAME": "Azure Test Minecraft Server",
-        }
-    }
-}
-
+#test
 @app.route('/api/server/start-server', methods=['POST'])
 def start_server():
     """Start a new game server instance"""
