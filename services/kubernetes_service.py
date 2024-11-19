@@ -44,7 +44,16 @@ class KubernetesService:
                 credential = DefaultAzureCredential()
                 logger.info("Using Managed Identity")
                 
-                token = credential.get_token("https://management.azure.com/.default")
+                # Try AKS-specific scope
+                try:
+                    token = credential.get_token("https://aks.azure.com/.default")
+                    logger.info("Using AKS-specific token scope")
+                except Exception as aks_error:
+                    logger.warning(f"AKS scope failed: {str(aks_error)}")
+                    logger.info("Falling back to management scope...")
+                    token = credential.get_token("https://management.azure.com/.default")
+                    logger.info("Using management token scope")
+                
                 logger.info("Token received (length: %d)", len(token.token))
                 logger.info("Token type: %s", token.token[:20] + "...")
                 
