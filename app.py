@@ -21,7 +21,7 @@ app = Flask(__name__)
 
 # Register the API blueprint
 app.register_blueprint(api)
-
+#test
 @app.route('/api/server/start-server', methods=['POST'])
 def start_server():
     """Single endpoint for both local and production environments"""
