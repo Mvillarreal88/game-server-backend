@@ -86,3 +86,7 @@ jobs:
         with:
           app-name: 'game-server-backend'
           slot-name: 'Production'
+
+      - name: 'Restart Azure Web App'
+        run: |
+          az webapp restart --name game-server-backend --resource-group GameServerRG
