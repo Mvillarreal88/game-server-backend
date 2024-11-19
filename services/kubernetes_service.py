@@ -4,11 +4,21 @@ import os
 from kubernetes.utils import create_from_yaml
 from utils.kubernetes_deployment_builder import KubernetesDeploymentBuilder
 import logging
+from azure.mgmt.containerinstance import ContainerInstanceManagementClient
 
 logging.getLogger('kubernetes').setLevel(logging.DEBUG)
 
 class KubernetesService:
     def __init__(self):
+        self.environment = os.getenv('ENVIRONMENT', 'development')
+        logger.info(f"Initializing KubernetesService in {self.environment} mode")
+        
+        if self.environment == 'production':
+            self._init_aks()
+        else:
+            self._init_aci()
+    
+    def _init_aks(self):
         try:
             logger = logging.getLogger(__name__)
             logger.info("Initializing KubernetesService...")
@@ -53,6 +63,18 @@ class KubernetesService:
         except Exception as e:
             logger.error(f"Error type: {type(e)}")
             logger.error(f"Error initializing Kubernetes client: {str(e)}")
+            raise
+
+    def _init_aci(self):
+        try:
+            credential = AzureCliCredential()
+            self.aci_client = ContainerInstanceManagementClient(
+                credential, 
+                self.subscription_id
+            )
+            logger.info("Successfully initialized ACI client")
+        except Exception as e:
+            logger.error(f"Failed to initialize ACI: {str(e)}")
             raise
 
     @classmethod

@@ -60,9 +60,11 @@ A Flask-based backend service for managing game server deployments on Azure Kube
 
 6. Create `.env` file:
    ```plaintext
+   ENVIRONMENT=development
    AZURE_SUBSCRIPTION_ID=your-subscription-id
    AZURE_RESOURCE_GROUP_NAME=GameServerRG
-   KUBECONFIG=C:/Users/yourusername/.kube/config
+   PORT=5000
+   KUBECONFIG_CONTENT=<base64-encoded-kubeconfig>
    ```
 
 7. Start the Flask application:

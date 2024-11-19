@@ -72,7 +72,7 @@ def start_server():
                 "namespace": namespace,
                 "config": config,
                 "namespace_count": len(namespaces.items),
-                "environment": "production" if os.getenv('WEBSITE_SITE_NAME') else "development"
+                "environment": "production" if os.getenv('ENVIRONMENT') == 'production' else "development"
             }), 200
             
         except Exception as namespace_error:
@@ -91,7 +91,7 @@ def start_server():
 
 if __name__ == '__main__':
     # Use port 8000 for production (Azure), 5000 for local development
-    is_production = os.getenv('WEBSITE_SITE_NAME') is not None
+    is_production = os.getenv('ENVIRONMENT') == 'production'
     default_port = 8000 if is_production else 5000
     port = int(os.getenv('PORT', default_port))
     
