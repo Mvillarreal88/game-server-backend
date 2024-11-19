@@ -6,8 +6,8 @@ server_routes = Blueprint("server_routes", __name__)
 # Example Game Configuration (mocked; replace with DB lookup later)
 GAME_PACKAGES = {
     "standard": {
-        "cpu": 2000,  # 2 cores
-        "memory": 6144,  # 6 GB in MiB
+        "cpu": 4000,  # 4 cores
+        "memory": 8192,  # 8 GB in MiB
         "image": "gameregistry.azurecr.io/minecraft-server:latest",
         "port": 25565,
         "env_vars": {
