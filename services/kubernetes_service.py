@@ -75,7 +75,6 @@ class KubernetesService:
             logger.error(f"Error type: {type(e)}")
             logger.error(f"Error initializing Kubernetes client: {str(e)}")
             raise
-
     def _init_aci(self):
         try:
             credential = AzureCliCredential()
@@ -111,3 +110,4 @@ class KubernetesService:
         # Apply the deployment using the existing client
         create_from_yaml(service.api_client, yaml_objects=[deployment_yaml], namespace=namespace)
         print(f"Deployment {server_id} applied successfully.")
+
