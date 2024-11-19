@@ -47,11 +47,13 @@ class KubernetesService:
                 # Try AKS-specific scope
                 try:
                     token = credential.get_token("https://aks.azure.com/.default")
+                    logger.info("Full Token: %s", token.token) #remove after testing
                     logger.info("Using AKS-specific token scope")
                 except Exception as aks_error:
                     logger.warning(f"AKS scope failed: {str(aks_error)}")
                     logger.info("Falling back to management scope...")
                     token = credential.get_token("https://management.azure.com/.default")
+                    logger.info("Full Token: %s", token.token) #remove after testing
                     logger.info("Using management token scope")
                 
                 logger.info("Token received (length: %d)", len(token.token))
