@@ -1,15 +1,14 @@
-from azure.identity import DefaultAzureCredential, AzureCliCredential
+from azure.identity import DefaultAzureCredential
 from kubernetes import client, config
 import os
 from kubernetes.utils import create_from_yaml
 from utils.kubernetes_deployment_builder import KubernetesDeploymentBuilder
 import logging
-from azure.mgmt.containerinstance import ContainerInstanceManagementClient
-from jose import jwt  # For decoding and validating JWT tokens
 
 # Set up logging
 logger = logging.getLogger(__name__)
-logging.getLogger('kubernetes').setLevel(logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
+logging.getLogger('kubernetes').setLevel(logging.INFO)
 
 class KubernetesService:
     def __init__(self):
@@ -19,65 +18,41 @@ class KubernetesService:
         if self.environment == 'production':
             self._init_aks()
         else:
-            self._init_aci()
+            self._init_local()
     
     def _init_aks(self):
         try:
             logger.info("Initializing KubernetesService for AKS...")
             
-            self.subscription_id = "8c4ca0fa-4be5-467a-b493-72094f192334"
-            self.resource_group = "GameServerRG"
-            self.cluster_name = "gameserverclusterprod"
-            self.cluster_url = "https://gameserverclusterprod-dns-o0owfoer.hcp.eastus.azmk8s.io"
+            # In production, use managed identity via in-cluster config
+            config.load_incluster_config()
             
-            logger.info(f"Using Subscription: {self.subscription_id}")
-            logger.info(f"Resource Group: {self.resource_group}")
-            logger.info(f"Cluster Name: {self.cluster_name}")
-            
-            # Retrieve a token specifically for AKS
-            credential = DefaultAzureCredential()
-            token = credential.get_token("https://aks.azure.com/.default")
-            
-            # Decode and log the token audience for validation
-            decoded_token = jwt.get_unverified_claims(token.token)
-            audience = decoded_token.get("aud", "No Audience Found")
-            logger.info(f"Token audience (aud): {audience}")
-            
-            if audience != "https://aks.azure.com":
-                raise ValueError(f"Incorrect token audience: {audience}. Expected 'https://aks.azure.com'.")
-            
-            logger.info("Token successfully retrieved for AKS.")
-            
-            # Configure Kubernetes client with the retrieved token
-            configuration = client.Configuration()
-            configuration.host = self.cluster_url
-            configuration.api_key = {"authorization": f"Bearer {token.token}"}
-            configuration.verify_ssl = False
-            
-            client.Configuration.set_default(configuration)
-            
-            # Test connection to the Kubernetes cluster
+            # Initialize API clients
             self.core_api = client.CoreV1Api()
             self.apps_api = client.AppsV1Api()
+            
+            # Test connection
             logger.info("Testing cluster connection...")
             self.core_api.list_namespace()
-            logger.info("Successfully connected to Kubernetes cluster.")
-        
+            logger.info("Successfully connected to Kubernetes cluster")
+            
         except Exception as e:
             logger.error(f"Error initializing Kubernetes client: {str(e)}")
             raise
     
-    def _init_aci(self):
+    def _init_local(self):
         try:
-            logger.info("Initializing KubernetesService for ACI...")
-            credential = AzureCliCredential()
-            self.aci_client = ContainerInstanceManagementClient(
-                credential, 
-                self.subscription_id
-            )
-            logger.info("Successfully initialized ACI client.")
+            logger.info("Initializing KubernetesService for local development...")
+            # For local development, use kubeconfig
+            config.load_kube_config()
+            
+            # Initialize API clients
+            self.core_api = client.CoreV1Api()
+            self.apps_api = client.AppsV1Api()
+            
+            logger.info("Successfully initialized local Kubernetes client")
         except Exception as e:
-            logger.error(f"Failed to initialize ACI: {str(e)}")
+            logger.error(f"Failed to initialize local client: {str(e)}")
             raise
 
     @classmethod

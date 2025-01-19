@@ -22,7 +22,17 @@ app = Flask(__name__)
 
 # Register the API blueprint
 app.register_blueprint(api)
-#test
+
+@app.route('/health')
+def health_check():
+    """Health check endpoint for Azure App Service"""
+    return jsonify({"status": "healthy"}), 200
+
+@app.route('/robots933456.txt')
+def robots_txt():
+    """Required for Azure App Service health checks"""
+    return '', 200
+
 @app.route('/api/server/start-server', methods=['POST'])
 def start_server():
     """Start a new game server instance"""
