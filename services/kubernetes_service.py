@@ -31,7 +31,7 @@ class KubernetesService:
             if not cluster_url or not server_id:
                 raise ValueError("Missing required environment variables: AKS_CLUSTER_URL and AKS_SERVER_ID")
             
-            logger.info(f"Using AKS cluster URL: {cluster_url.split('.')[0]}.*****") # Log only first part
+            logger.info(f"Using AKS cluster URL: {cluster_url.split('.')[0]}.*****")
             
             # Get token using Managed Identity
             credential = DefaultAzureCredential()
@@ -41,7 +41,15 @@ class KubernetesService:
             configuration = client.Configuration()
             configuration.host = cluster_url
             configuration.api_key = {"authorization": f"Bearer {token.token}"}
+            
+            # SSL Configuration
             configuration.verify_ssl = True
+            configuration.ssl_ca_cert = '/var/run/secrets/kubernetes.io/serviceaccount/ca.crt'
+            
+            if not os.path.exists(configuration.ssl_ca_cert):
+                logger.warning("CA cert not found at default location, disabling SSL verification")
+                configuration.verify_ssl = False
+                configuration.assert_hostname = False
             
             client.Configuration.set_default(configuration)
             
