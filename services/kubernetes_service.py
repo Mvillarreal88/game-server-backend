@@ -24,8 +24,20 @@ class KubernetesService:
         try:
             logger.info("Initializing KubernetesService for AKS...")
             
-            # In production, use managed identity via in-cluster config
-            config.load_incluster_config()
+            # Get cluster details from your kubeconfig
+            cluster_url = "https://gameserverclusterprod-dns-o0owfoer.hcp.eastus.azmk8s.io"
+            
+            # Get token using Managed Identity
+            credential = DefaultAzureCredential()
+            token = credential.get_token("6dae42f8-4368-4678-94ff-3960e28e3630/.default")  # AKS Server ID
+            
+            # Configure Kubernetes client
+            configuration = client.Configuration()
+            configuration.host = cluster_url
+            configuration.api_key = {"authorization": f"Bearer {token.token}"}
+            configuration.verify_ssl = True
+            
+            client.Configuration.set_default(configuration)
             
             # Initialize API clients
             self.core_api = client.CoreV1Api()
@@ -33,11 +45,11 @@ class KubernetesService:
             
             # Test connection
             logger.info("Testing cluster connection...")
-            self.core_api.list_namespace()
-            logger.info("Successfully connected to Kubernetes cluster")
+            namespaces = self.core_api.list_namespace()
+            logger.info(f"Successfully connected to Kubernetes cluster. Found {len(namespaces.items)} namespaces")
             
         except Exception as e:
-            logger.error(f"Error initializing Kubernetes client: {str(e)}")
+            logger.error(f"Error initializing Kubernetes client: {str(e)}", exc_info=True)
             raise
     
     def _init_local(self):
