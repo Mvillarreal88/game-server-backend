@@ -4,6 +4,8 @@ import os
 from kubernetes.utils import create_from_yaml
 from utils.kubernetes_deployment_builder import KubernetesDeploymentBuilder
 import logging
+import tempfile
+import base64
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -27,9 +29,10 @@ class KubernetesService:
             # Get cluster details from environment variables
             cluster_url = os.getenv('AKS_CLUSTER_URL')
             server_id = os.getenv('AKS_SERVER_ID')
+            cluster_ca_cert = os.getenv('AKS_CLUSTER_CA_CERT')
             
-            if not cluster_url or not server_id:
-                raise ValueError("Missing required environment variables: AKS_CLUSTER_URL and AKS_SERVER_ID")
+            if not all([cluster_url, server_id, cluster_ca_cert]):
+                raise ValueError("Missing required environment variables: AKS_CLUSTER_URL, AKS_SERVER_ID, or AKS_CLUSTER_CA_CERT")
             
             logger.info(f"Using AKS cluster URL: {cluster_url.split('.')[0]}.*****")
             
@@ -42,14 +45,11 @@ class KubernetesService:
             configuration.host = cluster_url
             configuration.api_key = {"authorization": f"Bearer {token.token}"}
             
-            # SSL Configuration
-            configuration.verify_ssl = True
-            configuration.ssl_ca_cert = '/var/run/secrets/kubernetes.io/serviceaccount/ca.crt'
-            
-            if not os.path.exists(configuration.ssl_ca_cert):
-                logger.warning("CA cert not found at default location, disabling SSL verification")
-                configuration.verify_ssl = False
-                configuration.assert_hostname = False
+            # Write CA cert to temp file
+            with tempfile.NamedTemporaryFile(delete=False) as cert_file:
+                cert_file.write(base64.b64decode(cluster_ca_cert))
+                configuration.ssl_ca_cert = cert_file.name
+                configuration.verify_ssl = True
             
             client.Configuration.set_default(configuration)
             
