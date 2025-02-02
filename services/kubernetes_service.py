@@ -24,12 +24,18 @@ class KubernetesService:
         try:
             logger.info("Initializing KubernetesService for AKS...")
             
-            # Get cluster details from your kubeconfig
-            cluster_url = "https://gameserverclusterprod-dns-o0owfoer.hcp.eastus.azmk8s.io"
+            # Get cluster details from environment variables
+            cluster_url = os.getenv('AKS_CLUSTER_URL')
+            server_id = os.getenv('AKS_SERVER_ID')
+            
+            if not cluster_url or not server_id:
+                raise ValueError("Missing required environment variables: AKS_CLUSTER_URL and AKS_SERVER_ID")
+            
+            logger.info(f"Using AKS cluster URL: {cluster_url.split('.')[0]}.*****") # Log only first part
             
             # Get token using Managed Identity
             credential = DefaultAzureCredential()
-            token = credential.get_token("6dae42f8-4368-4678-94ff-3960e28e3630/.default")  # AKS Server ID
+            token = credential.get_token(f"{server_id}/.default")
             
             # Configure Kubernetes client
             configuration = client.Configuration()
