@@ -50,6 +50,9 @@ class KubernetesDeploymentBuilder:
                     },
                     "spec": {
                         "containers": [container_spec],
+                        "nodeSelector": {
+                            "workload": "gameserver"  # This targets our new gamepool
+                        }
                     }
                 }
             }

@@ -92,6 +92,10 @@ class KubernetesService:
             # Create an instance to use the initialized client
             service = cls()
 
+            # Log node pool targeting
+            logger.info("Targeting gamepool for deployment...")
+            logger.info(f"Deployment {server_id} will be scheduled on nodes with label: workload=gameserver")
+
             # Generate deployment YAML dynamically
             deployment_yaml = KubernetesDeploymentBuilder.generate_yaml(
                 deployment_name=server_id,
