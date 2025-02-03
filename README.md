@@ -182,10 +182,13 @@ The application is configured for deployment to Azure App Service via GitHub Act
 
 ## Environment Variables
 
-Required environment variables in `.env`:
+Required environment variables in `.env` and Azure App Service:
 - `AZURE_SUBSCRIPTION_ID`: Your Azure subscription ID
 - `AZURE_RESOURCE_GROUP_NAME`: Resource group containing AKS cluster
 - `KUBECONFIG`: Path to your kubeconfig file
+- `B2_KEY_ID`: Backblaze B2 key ID
+- `B2_KEY_NAME`: Backblaze B2 key name
+- `B2_APP_KEY`: Backblaze B2 application key
 
 ## License
 
