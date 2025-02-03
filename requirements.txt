@@ -9,4 +9,4 @@ pytest-cov
 certifi>=2023.7.22
 azure-mgmt-containerservice>=20.0.0
 python-jose>=3.3.0
-b2sdk>=3.0.0
+b2sdk==2.8.0
