@@ -104,6 +104,22 @@ game-server-backend/
 - `GET /api/user/info`: Get user information
 - `GET /api/user/servers`: List user's servers
 
+## FastAPI Development (Beta)
+
+For local development with FastAPI:
+
+1. Install additional dependencies:
+   ```bash
+   pip install -r requirements.dev.txt
+   ```
+
+2. Run FastAPI server (different port):
+   ```bash
+   python main.py
+   ```
+
+FastAPI docs available at: http://localhost:8001/docs
+
 ## Testing
 
 ### API Testing with Postman
