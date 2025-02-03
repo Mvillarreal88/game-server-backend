@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from services.kubernetes_service import KubernetesService
 from services.b2_storage_service import B2StorageService
+import logging
 
 server_routes = Blueprint("server_routes", __name__)
 
@@ -28,15 +29,15 @@ GAME_PACKAGES = {
     }
 }
 
+logger = logging.getLogger(__name__)
 
 @server_routes.route("/start-server", methods=["POST"])
 def start_server():
     data = request.json
-    package = data.get("package")  # Game package purchased
-    server_id = data.get("server_id")  # Unique server ID
-    namespace = data.get("namespace", "default")  # Optional namespace
+    package = data.get("package")
+    server_id = data.get("server_id")
+    namespace = data.get("namespace", "default")
 
-    # Validate package
     if package not in GAME_PACKAGES:
         return jsonify({"error": f"Invalid package: {package}"}), 400
 
@@ -47,8 +48,9 @@ def start_server():
         b2_service = B2StorageService()
         existing_files = b2_service.list_files(server_id)
         
-        # If no existing files, create default ones
+        # Only create default files if this is a new server
         if not existing_files:
+            logger.info(f"New server detected. Creating default files for {server_id}")
             default_files = {
                 "server.properties": "server-name=My Minecraft Server\ndifficulty=normal\ngamemode=survival",
                 "ops.json": "[]",
@@ -58,6 +60,8 @@ def start_server():
             }
             for filename, content in default_files.items():
                 b2_service.update_file(server_id, filename, content)
+        else:
+            logger.info(f"Existing server detected. Will restore files for {server_id}: {existing_files}")
         
         # Deploy the server
         KubernetesService.deploy_game_server(
@@ -67,12 +71,14 @@ def start_server():
             cpu=config["cpu"],
             memory=config["memory"],
             port=config["port"],
-            env_vars=config["env_vars"]
+            env_vars=config["env_vars"],
+            # TODO: Add volume mount for B2 files
         )
         
         return jsonify({
             "message": f"Server {server_id} for package {package} is starting...",
-            "files_restored": bool(existing_files)
+            "files_restored": bool(existing_files),
+            "existing_files": existing_files if existing_files else []
         }), 200
         
     except Exception as e:

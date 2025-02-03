@@ -1,6 +1,7 @@
 from b2sdk.v2 import B2Api, InMemoryAccountInfo
 import os
 import logging
+import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -36,13 +37,22 @@ class B2StorageService:
             raise
 
     def update_file(self, server_id, file_path, content):
-        """Update file content"""
+        """Update or create a file"""
         try:
             full_path = f"{server_id}/{file_path}"
-            self.bucket.upload_bytes(
-                content.encode('utf-8'),
-                full_path
-            )
+            data = content.encode('utf-8')
+            
+            # Create a temporary file with the content
+            with tempfile.NamedTemporaryFile() as temp_file:
+                temp_file.write(data)
+                temp_file.flush()
+                
+                # Upload the file to B2
+                self.bucket.upload_local_file(
+                    local_file=temp_file.name,
+                    file_name=full_path
+                )
+                logger.info(f"Successfully uploaded {file_path} for server {server_id}")
         except Exception as e:
             logger.error(f"Failed to update file {file_path}: {str(e)}")
             raise
