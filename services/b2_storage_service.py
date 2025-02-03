@@ -19,8 +19,11 @@ class B2StorageService:
     def list_files(self, server_id):
         """List all files for a server"""
         try:
-            files = self.bucket.ls(f"{server_id}/")
-            return [file.file_name for file in files]
+            # The ls() method returns a generator of tuples, we need to handle it differently
+            file_list = []
+            for file_version_info, _ in self.bucket.ls(f"{server_id}/"):
+                file_list.append(file_version_info.file_name)
+            return file_list
         except Exception as e:
             logger.error(f"Failed to list files for server {server_id}: {str(e)}")
             raise
