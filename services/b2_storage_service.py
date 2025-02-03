@@ -46,16 +46,23 @@ class B2StorageService:
             data = content.encode('utf-8')
             
             # Create a temporary file with the content
-            with tempfile.NamedTemporaryFile() as temp_file:
+            with tempfile.NamedTemporaryFile(delete=False) as temp_file:
                 temp_file.write(data)
                 temp_file.flush()
                 
+                logger.info(f"Uploading file {full_path} to B2 bucket {self.bucket.name}")
+                
                 # Upload the file to B2
-                self.bucket.upload_local_file(
+                file_info = self.bucket.upload_local_file(
                     local_file=temp_file.name,
                     file_name=full_path
                 )
-                logger.info(f"Successfully uploaded {file_path} for server {server_id}")
+                
+                logger.info(f"Successfully uploaded {file_path} for server {server_id}. File ID: {file_info.id}")
+                
+                # Clean up temp file
+                os.unlink(temp_file.name)
+                
         except Exception as e:
-            logger.error(f"Failed to update file {file_path}: {str(e)}")
+            logger.error(f"Failed to update file {file_path} for server {server_id}: {str(e)}")
             raise
