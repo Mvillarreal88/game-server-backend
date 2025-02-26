@@ -1,0 +1,57 @@
+{
+  "projectName": "Game Server Backend",
+  "projectDescription": "A cloud-native backend for dynamically provisioning and managing game servers on Azure Kubernetes Service",
+  "mainBranch": "main",
+  "excludePatterns": [
+    "venv/**",
+    "__pycache__/**",
+    "*.pyc",
+    ".pytest_cache/**",
+    ".git/**"
+  ],
+  "tasks": {
+    "location": ".cursor/tasks"
+  },
+  "notes": {
+    "location": ".cursor/.cursor-notes"
+  },
+  "environment": {
+    "python": {
+      "version": "3.12",
+      "linter": "pylint",
+      "formatter": "black",
+      "testFramework": "pytest"
+    },
+    "kubernetes": {
+      "version": "1.26",
+      "provider": "azure"
+    },
+    "azure": {
+      "subscription": "Game Server Subscription",
+      "resourceGroup": "GameServerRG",
+      "location": "eastus"
+    }
+  },
+  "services": [
+    {
+      "name": "Kubernetes Service",
+      "path": "services/kubernetes_service.py",
+      "description": "Manages game server deployments on AKS"
+    },
+    {
+      "name": "B2 Storage Service",
+      "path": "services/b2_storage_service.py",
+      "description": "Manages game saves and configuration files"
+    },
+    {
+      "name": "API Service",
+      "path": "services/api_service.py",
+      "description": "Handles HTTP requests for server management"
+    }
+  ],
+  "currentFocus": [
+    "Fix IP address persistence",
+    "Complete server activity monitoring",
+    "Improve B2 storage integration"
+  ]
+} 

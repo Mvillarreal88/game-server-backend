@@ -1,6 +1,50 @@
-venv/
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
 .env
+.env.*
+!.env.example
+
+# Cursor
+.cursor/.cursor-notes/ip_persistence.md  # Contains sensitive resource group names
+.cursor/.cursor-project  # May contain sensitive subscription info
+
+# Keep shared project structure
+!.cursor/
+!.cursor/tasks/
+!.cursor/.cursor-notes/architecture.md
+!.cursor/.cursor-notes/deployment.md
+
+# Testing
 .pytest_cache/
-.cursorrules
+.coverage
+htmlcov/
+
+# Azure
+.azure/
+*.publishsettings
+
+# Kubernetes
+kubeconfig
+*.kubeconfig
+*kubeconfig*
+
+# Logs
+*.log
+logs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

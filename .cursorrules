@@ -1,0 +1,198 @@
+# Cursor Rules for Game Server Backend Project
+
+# File Patterns
+include_files:
+  - "*.py"
+  - "*.yml"
+  - "*.yaml"
+  - "*.md"
+  - ".env*"
+  - "requirements.txt"
+  - ".cursor/tasks/*.md"
+
+exclude_files:
+  - "venv/*"
+  - "__pycache__/*"
+  - "*.pyc"
+  - ".pytest_cache/*"
+
+# Code Style
+max_line_length: 100
+indent_style: space
+indent_size: 4
+end_of_line: lf
+
+# Python-specific
+python_version: 3.12
+allow_relative_imports: true
+prefer_single_quotes: false
+
+# Documentation
+require_docstrings: true
+docstring_style: google
+
+# Logging
+require_logging: true
+log_level_var: logging.INFO
+
+# Task Management
+task_tracking:
+  enabled: true
+  task_files:
+    - ".cursor/tasks/backlog.md"
+    - ".cursor/tasks/in-progress.md"
+    - ".cursor/tasks/completed.md"
+  auto_update: true
+  conversation_tracking: true
+  task_format: "- [ ] **{task_name}**\n  - {task_description}\n  - Status: {status}"
+  completed_format: "- [x] **{task_name}**\n  - {task_description}\n  - Completed: {date}"
+
+# Environment
+env_file: .env
+env_vars_required:
+  # Azure Core
+  - AZURE_SUBSCRIPTION_ID
+  - AZURE_RESOURCE_GROUP_NAME
+  - ENVIRONMENT
+  
+  # Development Environment Variables
+  - PORT
+  
+  # ACR Credentials (Development)
+  - ACR_USERNAME
+  - ACR_PASSWORD
+  - ACR_LOGIN_SERVER
+  
+  # Storage Credentials (Development)
+  - STORAGE_ACCOUNT_NAME
+  - STORAGE_ACCOUNT_KEY
+  - STORAGE_SHARE_NAME
+  
+  # Database Credentials (Development)
+  - DB_HOST
+  - DB_NAME
+  - DB_USERNAME
+  - DB_PASSWORD
+  
+  # Kubernetes Config (Development)
+  - KUBECONFIG
+  - KUBECONFIG_CONTENT
+  
+  # B2 Storage Credentials
+  - B2_KEY_ID
+  - B2_APP_KEY
+  - B2_BUCKET_NAME
+
+# External Services Configuration
+external_services:
+  azure_key_vault:
+    name: game-server-kv
+    dev_env_vars:
+      - KEY_VAULT_SECRET_1
+      - KEY_VAULT_SECRET_2
+    prod_service: "Azure Key Vault"
+
+  azure_container_registry:
+    name: gameregistry
+    dev_env_vars:
+      - ACR_USERNAME
+      - ACR_PASSWORD
+      - ACR_LOGIN_SERVER
+    prod_service: "Azure Container Registry"
+
+  azure_storage:
+    name: gameserversa
+    dev_env_vars:
+      - STORAGE_ACCOUNT_NAME
+      - STORAGE_ACCOUNT_KEY
+      - STORAGE_SHARE_NAME
+    prod_service: "Azure Storage Account"
+
+  azure_database:
+    name: game-server-db
+    dev_env_vars:
+      - DB_HOST
+      - DB_NAME
+      - DB_USERNAME
+      - DB_PASSWORD
+    prod_service: "Azure Database for PostgreSQL"
+
+  azure_kubernetes:
+    name: GameServerClusterProd
+    dev_env_vars:
+      - KUBECONFIG
+      - KUBECONFIG_CONTENT
+    prod_service: "Azure Kubernetes Service"
+    cluster_config:
+      url: https://gameserverclusterprod-dns-o0owfoer.hcp.eastus.azmk8s.io
+      resource_group: GameServerRG
+      cluster_name: GameServerClusterProd
+  
+  backblaze_b2:
+    name: game-servers
+    dev_env_vars:
+      - B2_KEY_ID
+      - B2_APP_KEY
+      - B2_BUCKET_NAME
+    prod_service: "Backblaze B2"
+
+# Security
+verify_ssl: true
+require_auth: true
+sensitive_vars:
+  # Azure Core
+  - AZURE_CLIENT_ID
+  - AZURE_TENANT_ID
+  - AZURE_SUBSCRIPTION_ID
+  
+  # ACR
+  - ACR_PASSWORD
+  
+  # Storage
+  - STORAGE_ACCOUNT_KEY
+  
+  # Database
+  - DB_PASSWORD
+  
+  # Kubernetes
+  - KUBECONFIG_CONTENT
+  
+  # B2
+  - B2_KEY_ID
+  - B2_APP_KEY
+
+# Development Guidelines
+development:
+  local_env_file: true
+  env_file_template: ".env.example"
+  required_tools:
+    - azure-cli
+    - kubectl
+    - kubelogin
+    - docker
+    - docker-compose
+  local_services:
+    - docker
+    - docker-compose
+  conversation_to_tasks: true
+  auto_update_tasks: true
+
+# Testing
+test_framework: pytest
+require_tests: true
+
+# Deployment
+deployment_platform: azure
+azure_app_name: game-server-backend
+production_detection: WEBSITE_SITE_NAME
+
+# IP Persistence
+ip_persistence:
+  enabled: true
+  annotations:
+    - service.beta.kubernetes.io/azure-load-balancer-resource-group
+    - service.beta.kubernetes.io/azure-pip-name
+    - service.beta.kubernetes.io/azure-dns-label-name
+    - service.beta.kubernetes.io/azure-load-balancer-ip-allocation-method
+  implementation_file: "services/kubernetes_service.py"
+  method: "create_game_service"

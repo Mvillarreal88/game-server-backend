@@ -75,10 +75,21 @@ def start_server():
             # TODO: Add volume mount for B2 files
         )
         
+        # After deploying the server
+        node_ip, node_port = KubernetesService.create_game_service(
+            server_id=server_id,
+            namespace=namespace,
+            port=config["port"]
+        )
+        
         return jsonify({
             "message": f"Server {server_id} for package {package} is starting...",
             "files_restored": bool(existing_files),
-            "existing_files": existing_files if existing_files else []
+            "existing_files": existing_files if existing_files else [],
+            "connection_info": {
+                "ip": node_ip,
+                "port": node_port
+            }
         }), 200
         
     except Exception as e:
