@@ -149,6 +149,9 @@ class KubernetesService:
                 # Get or create a static IP for this server
                 static_ip_name = f"{server_id}-pip"
                 
+                # Actually create the IP resource in Azure
+                cls._get_or_create_static_ip(server_id)
+                
                 logger.info(f"Creating service {service_name} with shared AKS load balancer")
                 service_manifest = {
                     "apiVersion": "v1",
