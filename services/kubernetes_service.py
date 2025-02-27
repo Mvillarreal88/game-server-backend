@@ -278,6 +278,11 @@ class KubernetesService:
         ip = ip_poller.result()
         
         logger.info(f"Created public IP: {ip_name}")
+        
+        # Add a short delay to ensure the IP is fully provisioned
+        logger.info("Waiting for IP to be fully provisioned...")
+        time.sleep(10)
+        
         return ip_name
 
     # TODO: Implement server activity check
