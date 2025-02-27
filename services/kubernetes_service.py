@@ -117,81 +117,124 @@ class KubernetesService:
             logger.error(f"Failed to deploy game server {server_id}: {str(e)}")
             raise
 
-@classmethod
-def create_game_service(cls, server_id, namespace, port):
-    """Create service for game server using existing AKS infrastructure"""
-    try:
-        service = cls()
-        service_name = f"{server_id}-svc"
-        
-        # Check if service already exists
-        logger.info(f"Checking for existing service: {service_name} in namespace {namespace}")
+    @classmethod
+    def create_game_service(cls, server_id, namespace, port, game_type="minecraft"):
+        """Create service for game server using existing AKS infrastructure"""
         try:
-            existing_svc = service.core_api.read_namespaced_service(
-                name=service_name,
-                namespace=namespace
-            )
-            if existing_svc:
-                logger.info(f"Found existing service {service_name}")
-                if existing_svc.status.load_balancer.ingress:
-                    ip = existing_svc.status.load_balancer.ingress[0].ip
-                    logger.info(f"Reusing existing IP: {ip}")
-                    return ip, port
+            service = cls()
+            service_name = f"{server_id}-svc"
+            
+            # Check if service already exists
+            logger.info(f"Checking for existing service: {service_name} in namespace {namespace}")
+            try:
+                existing_svc = service.core_api.read_namespaced_service(
+                    name=service_name,
+                    namespace=namespace
+                )
+                if existing_svc:
+                    logger.info(f"Found existing service {service_name}")
+                    if existing_svc.status.load_balancer.ingress:
+                        ip = existing_svc.status.load_balancer.ingress[0].ip
+                        logger.info(f"Reusing existing IP: {ip}")
+                        return ip, port
                 
-        except client.exceptions.ApiException as e:
-            if e.status != 404:
-                raise
-            logger.info(f"No existing service found for {service_name}")
+            except client.exceptions.ApiException as e:
+                if e.status != 404:
+                    raise
+                logger.info(f"No existing service found for {service_name}")
 
-        # Create new service using cluster's load balancer
-        logger.info(f"Creating new service {service_name} using cluster load balancer")
-        service_manifest = {
-            "apiVersion": "v1",
-            "kind": "Service",
-            "metadata": {
-                "name": service_name,
-                "annotations": {
-                    "service.beta.kubernetes.io/azure-load-balancer-resource-group": "MC_GameServerRG_GameServerClusterProd_eastus"
+            # For Minecraft servers, use a shared load balancer approach
+            if game_type == "minecraft":
+                # Get or create a static IP for this server
+                static_ip_name = f"{server_id}-pip"
+                
+                logger.info(f"Creating service {service_name} with shared AKS load balancer")
+                service_manifest = {
+                    "apiVersion": "v1",
+                    "kind": "Service",
+                    "metadata": {
+                        "name": service_name,
+                        "annotations": {
+                            "service.beta.kubernetes.io/azure-load-balancer-resource-group": "MC_GameServerRG_GameServerClusterProd_eastus",
+                            "service.beta.kubernetes.io/azure-pip-name": static_ip_name,
+                            "service.beta.kubernetes.io/azure-load-balancer-internal": "false"
+                        }
+                    },
+                    "spec": {
+                        "type": "LoadBalancer",
+                        "ports": [{
+                            "port": port,
+                            "targetPort": port,
+                            "protocol": "TCP"
+                        }],
+                        "selector": {"app": server_id}
+                    }
                 }
-            },
-            "spec": {
-                "type": "LoadBalancer",
-                "ports": [{
-                    "port": port,
-                    "targetPort": port,
-                    "protocol": "TCP"
-                }],
-                "selector": {"app": server_id}
-            }
-        }
-        
-        new_svc = service.core_api.create_namespaced_service(
-            namespace=namespace,
-            body=service_manifest
-        )
-        logger.info(f"Service {service_name} created successfully")
-        
-        # Wait for IP assignment
-        external_ip = None
-        logger.info("Waiting for IP assignment...")
-        for attempt in range(12):  # 60-second timeout
-            svc = service.core_api.read_namespaced_service(service_name, namespace)
-            if svc.status.load_balancer.ingress:
-                external_ip = svc.status.load_balancer.ingress[0].ip
-                logger.info(f"IP assigned: {external_ip}")
-                break
-            logger.info(f"Waiting for IP... Attempt {attempt + 1}/12")
-            time.sleep(5)
+            else:
+                # For high-performance games, use dedicated IPs with full annotations
+                logger.info(f"Creating service {service_name} with dedicated static IP")
+                service_manifest = {
+                    "apiVersion": "v1",
+                    "kind": "Service",
+                    "metadata": {
+                        "name": service_name,
+                        "annotations": {
+                            "service.beta.kubernetes.io/azure-load-balancer-resource-group": "MC_GameServerRG_GameServerClusterProd_eastus",
+                            "service.beta.kubernetes.io/azure-pip-name": f"{server_id}-pip",
+                            "service.beta.kubernetes.io/azure-dns-label-name": f"{server_id}-dns",
+                            "service.beta.kubernetes.io/azure-load-balancer-ip-allocation-method": "static"
+                        }
+                    },
+                    "spec": {
+                        "type": "LoadBalancer",
+                        "ports": [{
+                            "port": port,
+                            "targetPort": port,
+                            "protocol": "TCP"
+                        }],
+                        "selector": {"app": server_id}
+                    }
+                }
             
-        if not external_ip:
-            raise TimeoutError("Failed to get external IP after 60 seconds")
+            new_svc = service.core_api.create_namespaced_service(
+                namespace=namespace,
+                body=service_manifest
+            )
+            logger.info(f"Service {service_name} created successfully")
             
-        return external_ip, port
+            # Wait for IP assignment
+            external_ip = None
+            logger.info("Waiting for IP assignment...")
+            for attempt in range(12):  # 60-second timeout
+                svc = service.core_api.read_namespaced_service(service_name, namespace)
+                if svc.status.load_balancer.ingress:
+                    external_ip = svc.status.load_balancer.ingress[0].ip
+                    logger.info(f"IP assigned: {external_ip}")
+                    break
+                logger.info(f"Waiting for IP... Attempt {attempt + 1}/12")
+                time.sleep(5)
             
-    except Exception as e:
-        logger.error(f"Failed to create service: {str(e)}")
-        raise
+            if not external_ip:
+                raise TimeoutError("Failed to get external IP after 60 seconds")
+            
+            return external_ip, port
+            
+        except Exception as e:
+            logger.error(f"Failed to create service: {str(e)}")
+            raise
 
+    @classmethod
+    def _get_or_create_static_ip(cls, server_id):
+        """Get an existing static IP from pool or create a new one"""
+        # This is a placeholder - you would implement IP pool management
+        # Options:
+        # 1. Query a database table that tracks IP allocations
+        # 2. Use Azure SDK to find available IPs in your resource group
+        # 3. Maintain a config file with available IPs
+        
+        # For now, we'll just return a placeholder
+        # In production, you would implement proper IP management
+        return f"10.0.0.{hash(server_id) % 254 + 1}"  # Simplified example
 
     # TODO: Implement server activity check
     # def check_server_activity(self, server_id, namespace="default"):
