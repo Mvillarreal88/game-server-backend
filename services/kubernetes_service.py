@@ -7,6 +7,7 @@ import logging
 import time
 import tempfile
 import base64
+from azure.mgmt.network import NetworkManagementClient
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -226,15 +227,55 @@ class KubernetesService:
     @classmethod
     def _get_or_create_static_ip(cls, server_id):
         """Get an existing static IP from pool or create a new one"""
-        # This is a placeholder - you would implement IP pool management
-        # Options:
-        # 1. Query a database table that tracks IP allocations
-        # 2. Use Azure SDK to find available IPs in your resource group
-        # 3. Maintain a config file with available IPs
+        from azure.mgmt.network import NetworkManagementClient
+        from azure.identity import DefaultAzureCredential
+        import os
         
-        # For now, we'll just return a placeholder
-        # In production, you would implement proper IP management
-        return f"10.0.0.{hash(server_id) % 254 + 1}"  # Simplified example
+        # Get Azure resource group from environment or use the same one as in annotations
+        resource_group = os.getenv('AZURE_RESOURCE_GROUP', 'MC_GameServerRG_GameServerClusterProd_eastus')
+        subscription_id = os.getenv('AZURE_SUBSCRIPTION_ID')
+        
+        if not subscription_id:
+            raise ValueError("AZURE_SUBSCRIPTION_ID environment variable is required")
+        
+        # Create Azure Network client
+        credential = DefaultAzureCredential()
+        network_client = NetworkManagementClient(credential, subscription_id)
+        
+        # Name for the public IP resource
+        ip_name = f"{server_id}-pip"
+        
+        logger.info(f"Checking if public IP {ip_name} exists in resource group {resource_group}")
+        
+        # Check if IP already exists
+        try:
+            existing_ip = network_client.public_ip_addresses.get(
+                resource_group_name=resource_group,
+                public_ip_address_name=ip_name
+            )
+            logger.info(f"Found existing public IP: {ip_name}")
+            return ip_name
+        except Exception as e:
+            logger.info(f"Public IP {ip_name} not found, creating new one: {str(e)}")
+        
+        # Create new public IP
+        logger.info(f"Creating new public IP: {ip_name}")
+        ip_poller = network_client.public_ip_addresses.begin_create_or_update(
+            resource_group_name=resource_group,
+            public_ip_address_name=ip_name,
+            parameters={
+                "location": "eastus",  # Should match your AKS cluster region
+                "sku": {
+                    "name": "Standard"  # Required for AKS load balancers
+                },
+                "public_ip_allocation_method": "Static",
+                "idle_timeout_in_minutes": 4
+            }
+        )
+        ip = ip_poller.result()
+        
+        logger.info(f"Created public IP: {ip_name}")
+        return ip_name
 
     # TODO: Implement server activity check
     # def check_server_activity(self, server_id, namespace="default"):
