@@ -315,8 +315,8 @@ class KubernetesService:
             logger.error(f"Failed to delete deployment {server_id}: {str(e)}")
             raise
 
-    @classmethod
-    def copy_files_from_pod(cls, server_id, namespace="default", file_paths=None):
+    @staticmethod
+    def copy_files_from_pod(server_id, namespace="default", file_paths=None):
         """
         Copy files from a running pod to local storage
         Returns a dictionary of {file_path: file_content}
@@ -325,7 +325,7 @@ class KubernetesService:
             logger.info(f"Copying files from pod {server_id} in namespace {namespace}")
             
             # Create an instance to use the initialized client
-            service = cls()
+            service = KubernetesService()
             
             # Get pod name from deployment
             pod_list = service.core_api.list_namespaced_pod(
@@ -355,47 +355,42 @@ class KubernetesService:
             
             # Try to list files in the /data directory to see what's available
             try:
-                import subprocess
-                import json
-                
-                # Use kubectl to list files in the /data directory
-                logger.info(f"Listing files in /data directory using kubectl")
-                list_cmd = [
-                    "kubectl", "exec", "-n", namespace, pod_name, "--", 
-                    "find", "/data", "-type", "f", "-o", "-type", "d"
-                ]
-                
-                result = subprocess.run(list_cmd, capture_output=True, text=True)
-                if result.returncode == 0:
-                    available_files = result.stdout.strip().split('\n')
-                    logger.info(f"Files in /data directory: {available_files}")
-                else:
-                    logger.error(f"Failed to list files: {result.stderr}")
-                    available_files = []
+                logger.info(f"Listing files in /data directory")
+                exec_command = ['ls', '-la', '/data']
+                resp = service.core_v1.connect_get_namespaced_pod_exec(
+                    pod_name,
+                    namespace,
+                    command=exec_command,
+                    stderr=True, stdin=False,
+                    stdout=True, tty=False
+                )
+                logger.info(f"Files in /data directory: {resp}")
             except Exception as e:
-                logger.error(f"Error listing files: {str(e)}")
-                available_files = []
+                logger.warning(f"Could not list files in /data directory: {str(e)}")
             
-            # Copy each file using kubectl
+            # Read each file
             for file_path in file_paths:
                 try:
                     # For Minecraft server, files are in /data directory
                     full_path = f"/data/{file_path}"
                     
-                    # Use kubectl to read file content
-                    logger.info(f"Reading {full_path} using kubectl")
-                    cmd = [
-                        "kubectl", "exec", "-n", namespace, pod_name, "--", 
-                        "cat", full_path
-                    ]
+                    # Use exec to read file content
+                    logger.info(f"Reading {full_path} from pod")
+                    exec_command = ['cat', full_path]
+                    resp = service.core_v1.connect_get_namespaced_pod_exec(
+                        pod_name,
+                        namespace,
+                        command=exec_command,
+                        stderr=True, stdin=False,
+                        stdout=True, tty=False
+                    )
                     
-                    result = subprocess.run(cmd, capture_output=True, text=True)
-                    if result.returncode == 0:
-                        file_contents[file_path] = result.stdout
-                        logger.info(f"Successfully read file {file_path}")
-                    else:
-                        logger.warning(f"File {file_path} not found or empty: {result.stderr}")
+                    if "No such file or directory" in resp:
+                        logger.warning(f"File {file_path} not found in pod")
+                        continue
                         
+                    file_contents[file_path] = resp
+                    logger.info(f"Successfully read file {file_path} ({len(resp)} bytes)")
                 except Exception as e:
                     logger.error(f"Failed to read file {file_path}: {str(e)}")
             

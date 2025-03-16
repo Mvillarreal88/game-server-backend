@@ -255,9 +255,6 @@ def resume_server():
             logger.info("Waiting for container to initialize...")
             time.sleep(5)
             
-            # Use kubectl for file operations
-            import subprocess
-            
             for file_path in files_to_restore:
                 try:
                     # Skip directory entries
@@ -274,37 +271,29 @@ def resume_server():
                     # Create directory if needed
                     if '/' in file_path:
                         dir_path = '/'.join(full_path.split('/')[:-1])
-                        mkdir_cmd = [
-                            "kubectl", "exec", "-n", namespace, pod_name, "--", 
-                            "mkdir", "-p", dir_path
-                        ]
-                        
-                        result = subprocess.run(mkdir_cmd, capture_output=True, text=True)
-                        if result.returncode != 0:
-                            logger.warning(f"Failed to create directory {dir_path}: {result.stderr}")
+                        exec_command = ['mkdir', '-p', dir_path]
+                        service.core_v1.connect_get_namespaced_pod_exec(
+                            pod_name,
+                            namespace,
+                            command=exec_command,
+                            stderr=True, stdin=False,
+                            stdout=True, tty=False
+                        )
                     
-                    # Write file content to a temporary file
-                    import tempfile
-                    with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
-                        temp_file.write(content)
-                        temp_file_path = temp_file.name
+                    # Write file content to the pod
+                    # We need to use stdin to write the file
+                    exec_command = ['sh', '-c', f'cat > {full_path}']
+                    service.core_v1.connect_get_namespaced_pod_exec(
+                        pod_name,
+                        namespace,
+                        command=exec_command,
+                        stderr=True, stdin=True,
+                        stdout=True, tty=False,
+                        input=content
+                    )
                     
-                    # Copy the file to the pod
-                    copy_cmd = [
-                        "kubectl", "cp", temp_file_path, 
-                        f"{namespace}/{pod_name}:{full_path}"
-                    ]
-                    
-                    result = subprocess.run(copy_cmd, capture_output=True, text=True)
-                    if result.returncode == 0:
-                        restored_files.append(file_path)
-                        logger.info(f"Restored file {file_path} to pod {pod_name}")
-                    else:
-                        logger.error(f"Failed to copy file to pod: {result.stderr}")
-                    
-                    # Clean up temp file
-                    import os
-                    os.unlink(temp_file_path)
+                    restored_files.append(file_path)
+                    logger.info(f"Restored file {file_path} to pod {pod_name}")
                     
                 except Exception as e:
                     logger.error(f"Failed to restore file {file_path}: {str(e)}")
