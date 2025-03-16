@@ -357,20 +357,31 @@ class KubernetesService:
             # Copy each file
             file_contents = {}
             
+            # Import the stream module for WebSocket connections
+            from kubernetes.stream import stream
+            
             # Try to list files in the /data directory to see what's available
             try:
                 logger.info(f"Listing files in /data directory")
                 exec_command = ['ls', '-la', '/data']
                 logger.info(f"Executing command: {' '.join(exec_command)}")
                 
-                resp = service.core_api.connect_get_namespaced_pod_exec(
+                resp = stream(
+                    service.core_api.connect_get_namespaced_pod_exec,
                     pod_name,
                     namespace,
                     command=exec_command,
                     stderr=True, stdin=False,
-                    stdout=True, tty=False
+                    stdout=True, tty=False,
+                    _preload_content=False
                 )
-                logger.info(f"Files in /data directory: {resp}")
+                
+                # Wait for the command to complete
+                resp.run_forever()
+                
+                # Get the output
+                output = resp.read_all()
+                logger.info(f"Files in /data directory: {output}")
             except Exception as e:
                 logger.warning(f"Could not list files in /data directory: {str(e)}")
             
@@ -385,25 +396,33 @@ class KubernetesService:
                     exec_command = ['cat', full_path]
                     logger.info(f"Executing command: {' '.join(exec_command)}")
                     
-                    resp = service.core_api.connect_get_namespaced_pod_exec(
+                    resp = stream(
+                        service.core_api.connect_get_namespaced_pod_exec,
                         pod_name,
                         namespace,
                         command=exec_command,
                         stderr=True, stdin=False,
-                        stdout=True, tty=False
+                        stdout=True, tty=False,
+                        _preload_content=False
                     )
                     
-                    if "No such file or directory" in resp:
+                    # Wait for the command to complete
+                    resp.run_forever()
+                    
+                    # Get the output
+                    output = resp.read_all()
+                    
+                    if "No such file or directory" in output:
                         logger.warning(f"File {file_path} not found in pod")
                         continue
                     
                     # Check if the response is empty
-                    if not resp.strip():
+                    if not output.strip():
                         logger.warning(f"File {file_path} exists but is empty")
                         file_contents[file_path] = ""
                     else:
-                        file_contents[file_path] = resp
-                        logger.info(f"Successfully read file {file_path} ({len(resp)} bytes)")
+                        file_contents[file_path] = output
+                        logger.info(f"Successfully read file {file_path} ({len(output)} bytes)")
                 except Exception as e:
                     logger.error(f"Failed to read file {file_path}: {str(e)}")
             

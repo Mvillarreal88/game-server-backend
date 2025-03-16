@@ -259,18 +259,29 @@ def resume_server():
             logger.info("Waiting for container to initialize...")
             time.sleep(10)  # Increased from 5 to 10 seconds
             
+            # Import the stream module for WebSocket connections
+            from kubernetes.stream import stream
+            
             # Try to list files in the pod to verify it's ready
             try:
                 logger.info(f"Verifying pod is ready by listing files in /data directory")
                 exec_command = ['ls', '-la', '/data']
-                resp = service.core_api.connect_get_namespaced_pod_exec(
+                resp = stream(
+                    service.core_api.connect_get_namespaced_pod_exec,
                     pod_name,
                     namespace,
                     command=exec_command,
                     stderr=True, stdin=False,
-                    stdout=True, tty=False
+                    stdout=True, tty=False,
+                    _preload_content=False
                 )
-                logger.info(f"Files in /data directory before restoration: {resp}")
+                
+                # Wait for the command to complete
+                resp.run_forever()
+                
+                # Get the output
+                output = resp.read_all()
+                logger.info(f"Files in /data directory before restoration: {output}")
             except Exception as e:
                 logger.warning(f"Could not list files in /data directory: {str(e)}")
             
@@ -296,26 +307,36 @@ def resume_server():
                         dir_path = '/'.join(full_path.split('/')[:-1])
                         logger.info(f"Creating directory {dir_path} in pod")
                         exec_command = ['mkdir', '-p', dir_path]
-                        service.core_api.connect_get_namespaced_pod_exec(
+                        resp = stream(
+                            service.core_api.connect_get_namespaced_pod_exec,
                             pod_name,
                             namespace,
                             command=exec_command,
                             stderr=True, stdin=False,
-                            stdout=True, tty=False
+                            stdout=True, tty=False,
+                            _preload_content=False
                         )
+                        resp.run_forever()
                     
                     # Write file content to the pod
                     # We need to use stdin to write the file
                     logger.info(f"Writing content to {full_path} in pod")
                     exec_command = ['sh', '-c', f'cat > {full_path}']
-                    service.core_api.connect_get_namespaced_pod_exec(
+                    resp = stream(
+                        service.core_api.connect_get_namespaced_pod_exec,
                         pod_name,
                         namespace,
                         command=exec_command,
                         stderr=True, stdin=True,
                         stdout=True, tty=False,
-                        input=content
+                        _preload_content=False
                     )
+                    
+                    # Write the content to stdin
+                    resp.write_stdin(content)
+                    
+                    # Close stdin to signal we're done writing
+                    resp.close()
                     
                     restored_files.append(file_path)
                     logger.info(f"Successfully restored file {file_path} to pod {pod_name}")
@@ -327,14 +348,22 @@ def resume_server():
             try:
                 logger.info(f"Verifying files were restored by listing /data directory")
                 exec_command = ['ls', '-la', '/data']
-                resp = service.core_api.connect_get_namespaced_pod_exec(
+                resp = stream(
+                    service.core_api.connect_get_namespaced_pod_exec,
                     pod_name,
                     namespace,
                     command=exec_command,
                     stderr=True, stdin=False,
-                    stdout=True, tty=False
+                    stdout=True, tty=False,
+                    _preload_content=False
                 )
-                logger.info(f"Files in /data directory after restoration: {resp}")
+                
+                # Wait for the command to complete
+                resp.run_forever()
+                
+                # Get the output
+                output = resp.read_all()
+                logger.info(f"Files in /data directory after restoration: {output}")
             except Exception as e:
                 logger.warning(f"Could not list files in /data directory after restoration: {str(e)}")
         
