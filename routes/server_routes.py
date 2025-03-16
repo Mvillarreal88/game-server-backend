@@ -241,6 +241,7 @@ def resume_server():
             label_selector=f"app={server_id}"
         )
         
+        restored_files = []
         if pod_list.items:
             pod_name = pod_list.items[0].metadata.name
             
@@ -248,15 +249,23 @@ def resume_server():
             b2_service = B2StorageService()
             files_to_restore = b2_service.list_files(server_id)
             
-            restored_files = []
+            logger.info(f"Found {len(files_to_restore)} files to restore: {files_to_restore}")
+            
+            # Wait a bit for the container to initialize
+            logger.info("Waiting for container to initialize...")
+            time.sleep(5)
+            
+            # Use kubectl for file operations
+            import subprocess
+            
             for file_path in files_to_restore:
                 try:
-                    # Get the file content from B2
-                    content = b2_service.get_file(server_id, file_path)
-                    
-                    # Skip directory entries (usually end with /)
+                    # Skip directory entries
                     if file_path.endswith('/'):
                         continue
+                    
+                    # Get the file content from B2
+                    content = b2_service.get_file(server_id, file_path)
                     
                     # Write the file to the pod
                     # For Minecraft server, files are in /data directory
@@ -266,39 +275,36 @@ def resume_server():
                     if '/' in file_path:
                         dir_path = '/'.join(full_path.split('/')[:-1])
                         mkdir_cmd = [
-                            "/bin/sh",
-                            "-c",
-                            f"mkdir -p {dir_path}"
+                            "kubectl", "exec", "-n", namespace, pod_name, "--", 
+                            "mkdir", "-p", dir_path
                         ]
-                        service.core_api.connect_get_namespaced_pod_exec(
-                            name=pod_name,
-                            namespace=namespace,
-                            command=mkdir_cmd,
-                            stderr=True,
-                            stdin=False,
-                            stdout=True,
-                            tty=False
-                        )
+                        
+                        result = subprocess.run(mkdir_cmd, capture_output=True, text=True)
+                        if result.returncode != 0:
+                            logger.warning(f"Failed to create directory {dir_path}: {result.stderr}")
                     
-                    # Write file content
-                    write_cmd = [
-                        "/bin/sh",
-                        "-c",
-                        f"cat > {full_path} << 'EOF'\n{content}\nEOF"
+                    # Write file content to a temporary file
+                    import tempfile
+                    with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
+                        temp_file.write(content)
+                        temp_file_path = temp_file.name
+                    
+                    # Copy the file to the pod
+                    copy_cmd = [
+                        "kubectl", "cp", temp_file_path, 
+                        f"{namespace}/{pod_name}:{full_path}"
                     ]
                     
-                    service.core_api.connect_get_namespaced_pod_exec(
-                        name=pod_name,
-                        namespace=namespace,
-                        command=write_cmd,
-                        stderr=True,
-                        stdin=False,
-                        stdout=True,
-                        tty=False
-                    )
+                    result = subprocess.run(copy_cmd, capture_output=True, text=True)
+                    if result.returncode == 0:
+                        restored_files.append(file_path)
+                        logger.info(f"Restored file {file_path} to pod {pod_name}")
+                    else:
+                        logger.error(f"Failed to copy file to pod: {result.stderr}")
                     
-                    restored_files.append(file_path)
-                    logger.info(f"Restored file {file_path} to pod {pod_name}")
+                    # Clean up temp file
+                    import os
+                    os.unlink(temp_file_path)
                     
                 except Exception as e:
                     logger.error(f"Failed to restore file {file_path}: {str(e)}")

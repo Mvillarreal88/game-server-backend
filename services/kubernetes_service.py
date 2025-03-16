@@ -340,28 +340,6 @@ class KubernetesService:
             pod_name = pod_list.items[0].metadata.name
             logger.info(f"Found pod {pod_name} for deployment {server_id}")
             
-            # Debug: List all files in the /data directory
-            logger.info("Listing all files in /data directory to debug file paths")
-            ls_command = [
-                "/bin/sh",
-                "-c",
-                "find /data -type f | sort"
-            ]
-            
-            try:
-                ls_result = service.core_api.connect_get_namespaced_pod_exec(
-                    name=pod_name,
-                    namespace=namespace,
-                    command=ls_command,
-                    stderr=True,
-                    stdin=False,
-                    stdout=True,
-                    tty=False
-                )
-                logger.info(f"Files in /data directory: {ls_result}")
-            except Exception as e:
-                logger.error(f"Failed to list files in /data: {str(e)}")
-            
             # Default file paths if none provided
             if not file_paths:
                 file_paths = [
@@ -374,34 +352,49 @@ class KubernetesService:
             
             # Copy each file
             file_contents = {}
+            
+            # Try to list files in the /data directory to see what's available
+            try:
+                import subprocess
+                import json
+                
+                # Use kubectl to list files in the /data directory
+                logger.info(f"Listing files in /data directory using kubectl")
+                list_cmd = [
+                    "kubectl", "exec", "-n", namespace, pod_name, "--", 
+                    "find", "/data", "-type", "f", "-o", "-type", "d"
+                ]
+                
+                result = subprocess.run(list_cmd, capture_output=True, text=True)
+                if result.returncode == 0:
+                    available_files = result.stdout.strip().split('\n')
+                    logger.info(f"Files in /data directory: {available_files}")
+                else:
+                    logger.error(f"Failed to list files: {result.stderr}")
+                    available_files = []
+            except Exception as e:
+                logger.error(f"Error listing files: {str(e)}")
+                available_files = []
+            
+            # Copy each file using kubectl
             for file_path in file_paths:
                 try:
                     # For Minecraft server, files are in /data directory
                     full_path = f"/data/{file_path}"
                     
-                    # Use exec command to read file content
-                    exec_command = [
-                        "/bin/sh",
-                        "-c",
-                        f"cat {full_path} 2>/dev/null || echo 'FILE_NOT_FOUND'"
+                    # Use kubectl to read file content
+                    logger.info(f"Reading {full_path} using kubectl")
+                    cmd = [
+                        "kubectl", "exec", "-n", namespace, pod_name, "--", 
+                        "cat", full_path
                     ]
                     
-                    logger.info(f"Executing command to read {full_path}")
-                    resp = service.core_api.connect_get_namespaced_pod_exec(
-                        name=pod_name,
-                        namespace=namespace,
-                        command=exec_command,
-                        stderr=True,
-                        stdin=False,
-                        stdout=True,
-                        tty=False
-                    )
-                    
-                    if resp and "FILE_NOT_FOUND" not in resp:
-                        file_contents[file_path] = resp
+                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    if result.returncode == 0:
+                        file_contents[file_path] = result.stdout
                         logger.info(f"Successfully read file {file_path}")
                     else:
-                        logger.warning(f"File {file_path} not found or empty")
+                        logger.warning(f"File {file_path} not found or empty: {result.stderr}")
                         
                 except Exception as e:
                     logger.error(f"Failed to read file {file_path}: {str(e)}")
