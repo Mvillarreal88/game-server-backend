@@ -44,15 +44,42 @@ class B2StorageService:
             # Ensure we have the correct path format
             if file_path.startswith(f"{server_id}/"):
                 full_path = file_path
+                logger.info(f"Using provided full path: {full_path}")
             else:
                 full_path = f"{server_id}/{file_path}"
+                logger.info(f"Constructed full path: {full_path}")
             
-            logger.info(f"Getting file {full_path} from B2 bucket")
-            download = self.bucket.download_file_by_name(full_path)
-            with download.save_to() as file:
-                content = file.read().decode('utf-8')
+            logger.info(f"Getting file {full_path} from B2 bucket {self.bucket.name}")
+            
+            try:
+                # Create a temporary file to save the downloaded content
+                with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+                    temp_file_path = temp_file.name
+                
+                # Download the file to the temporary location
+                download = self.bucket.download_file_by_name(full_path)
+                download.save_to(temp_file_path)
+                
+                # Read the content from the temporary file
+                with open(temp_file_path, 'r') as f:
+                    content = f.read()
+                
+                # Clean up the temporary file
+                os.unlink(temp_file_path)
+                
                 logger.info(f"Successfully read file {file_path} ({len(content)} bytes)")
                 return content
+            except Exception as download_error:
+                logger.error(f"Error downloading file {full_path}: {str(download_error)}")
+                
+                # Try listing files to see what's available
+                logger.info(f"Listing available files with prefix {server_id}/")
+                available_files = []
+                for file_version_info, _ in self.bucket.ls(f"{server_id}/"):
+                    available_files.append(file_version_info.file_name)
+                
+                logger.info(f"Available files: {available_files}")
+                raise
         except Exception as e:
             logger.error(f"Failed to get file {file_path}: {str(e)}")
             raise
