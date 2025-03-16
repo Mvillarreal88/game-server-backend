@@ -340,6 +340,28 @@ class KubernetesService:
             pod_name = pod_list.items[0].metadata.name
             logger.info(f"Found pod {pod_name} for deployment {server_id}")
             
+            # Debug: List all files in the /data directory
+            logger.info("Listing all files in /data directory to debug file paths")
+            ls_command = [
+                "/bin/sh",
+                "-c",
+                "find /data -type f | sort"
+            ]
+            
+            try:
+                ls_result = service.core_api.connect_get_namespaced_pod_exec(
+                    name=pod_name,
+                    namespace=namespace,
+                    command=ls_command,
+                    stderr=True,
+                    stdin=False,
+                    stdout=True,
+                    tty=False
+                )
+                logger.info(f"Files in /data directory: {ls_result}")
+            except Exception as e:
+                logger.error(f"Failed to list files in /data: {str(e)}")
+            
             # Default file paths if none provided
             if not file_paths:
                 file_paths = [
