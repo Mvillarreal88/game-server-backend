@@ -207,13 +207,15 @@ def resume_server():
     namespace = data.get("namespace", "default")
 
     try:
-        logger.info(f"Resuming server {server_id} in namespace {namespace}")
+        logger.info(f"=== RESUMING SERVER {server_id} IN NAMESPACE {namespace} ===")
         
         # Scale the deployment back to 1 replica
+        logger.info(f"Scaling deployment {server_id} to 1 replica")
         KubernetesService.scale_deployment(server_id, namespace, 1)
         
         # Get the service information
         service_name = f"{server_id}-svc"
+        logger.info(f"Getting service information for {service_name}")
         service = KubernetesService()
         svc = service.core_api.read_namespaced_service(service_name, namespace)
         
@@ -244,8 +246,10 @@ def resume_server():
         restored_files = []
         if pod_list.items:
             pod_name = pod_list.items[0].metadata.name
+            logger.info(f"Found pod {pod_name} for file restoration")
             
             # Restore files from B2 storage
+            logger.info(f"Initializing B2 storage service for file restoration")
             b2_service = B2StorageService()
             files_to_restore = b2_service.list_files(server_id)
             
@@ -253,26 +257,46 @@ def resume_server():
             
             # Wait a bit for the container to initialize
             logger.info("Waiting for container to initialize...")
-            time.sleep(5)
+            time.sleep(10)  # Increased from 5 to 10 seconds
+            
+            # Try to list files in the pod to verify it's ready
+            try:
+                logger.info(f"Verifying pod is ready by listing files in /data directory")
+                exec_command = ['ls', '-la', '/data']
+                resp = service.core_api.connect_get_namespaced_pod_exec(
+                    pod_name,
+                    namespace,
+                    command=exec_command,
+                    stderr=True, stdin=False,
+                    stdout=True, tty=False
+                )
+                logger.info(f"Files in /data directory before restoration: {resp}")
+            except Exception as e:
+                logger.warning(f"Could not list files in /data directory: {str(e)}")
             
             for file_path in files_to_restore:
                 try:
                     # Skip directory entries
                     if file_path.endswith('/'):
+                        logger.info(f"Skipping directory entry: {file_path}")
                         continue
                     
                     # Get the file content from B2
+                    logger.info(f"Getting content for file {file_path} from B2")
                     content = b2_service.get_file(server_id, file_path)
+                    logger.info(f"Retrieved {len(content)} bytes for file {file_path}")
                     
                     # Write the file to the pod
                     # For Minecraft server, files are in /data directory
                     full_path = f"/data/{file_path}"
+                    logger.info(f"Preparing to write file to {full_path} in pod {pod_name}")
                     
                     # Create directory if needed
                     if '/' in file_path:
                         dir_path = '/'.join(full_path.split('/')[:-1])
+                        logger.info(f"Creating directory {dir_path} in pod")
                         exec_command = ['mkdir', '-p', dir_path]
-                        service.core_v1.connect_get_namespaced_pod_exec(
+                        service.core_api.connect_get_namespaced_pod_exec(
                             pod_name,
                             namespace,
                             command=exec_command,
@@ -282,8 +306,9 @@ def resume_server():
                     
                     # Write file content to the pod
                     # We need to use stdin to write the file
+                    logger.info(f"Writing content to {full_path} in pod")
                     exec_command = ['sh', '-c', f'cat > {full_path}']
-                    service.core_v1.connect_get_namespaced_pod_exec(
+                    service.core_api.connect_get_namespaced_pod_exec(
                         pod_name,
                         namespace,
                         command=exec_command,
@@ -293,10 +318,25 @@ def resume_server():
                     )
                     
                     restored_files.append(file_path)
-                    logger.info(f"Restored file {file_path} to pod {pod_name}")
+                    logger.info(f"Successfully restored file {file_path} to pod {pod_name}")
                     
                 except Exception as e:
                     logger.error(f"Failed to restore file {file_path}: {str(e)}")
+            
+            # Verify files were restored
+            try:
+                logger.info(f"Verifying files were restored by listing /data directory")
+                exec_command = ['ls', '-la', '/data']
+                resp = service.core_api.connect_get_namespaced_pod_exec(
+                    pod_name,
+                    namespace,
+                    command=exec_command,
+                    stderr=True, stdin=False,
+                    stdout=True, tty=False
+                )
+                logger.info(f"Files in /data directory after restoration: {resp}")
+            except Exception as e:
+                logger.warning(f"Could not list files in /data directory after restoration: {str(e)}")
         
         # Get the external IP and port
         external_ip = None
@@ -304,6 +344,10 @@ def resume_server():
         if svc.status.load_balancer.ingress:
             external_ip = svc.status.load_balancer.ingress[0].ip
             port = svc.spec.ports[0].port
+        
+        logger.info(f"=== SERVER {server_id} RESUMED SUCCESSFULLY ===")
+        logger.info(f"Connection info: IP={external_ip}, Port={port}")
+        logger.info(f"Restored {len(restored_files)} files: {restored_files}")
         
         return jsonify({
             "message": f"Server {server_id} resumed successfully",

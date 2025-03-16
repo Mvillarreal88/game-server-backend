@@ -322,12 +322,14 @@ class KubernetesService:
         Returns a dictionary of {file_path: file_content}
         """
         try:
-            logger.info(f"Copying files from pod {server_id} in namespace {namespace}")
+            logger.info(f"=== COPYING FILES FROM POD {server_id} IN NAMESPACE {namespace} ===")
             
             # Create an instance to use the initialized client
+            logger.info("Initializing Kubernetes service")
             service = KubernetesService()
             
             # Get pod name from deployment
+            logger.info(f"Finding pod for server {server_id}")
             pod_list = service.core_api.list_namespaced_pod(
                 namespace=namespace,
                 label_selector=f"app={server_id}"
@@ -350,6 +352,8 @@ class KubernetesService:
                     "banned-ips.json"
                 ]
             
+            logger.info(f"Will attempt to copy {len(file_paths)} files: {file_paths}")
+            
             # Copy each file
             file_contents = {}
             
@@ -357,7 +361,9 @@ class KubernetesService:
             try:
                 logger.info(f"Listing files in /data directory")
                 exec_command = ['ls', '-la', '/data']
-                resp = service.core_v1.connect_get_namespaced_pod_exec(
+                logger.info(f"Executing command: {' '.join(exec_command)}")
+                
+                resp = service.core_api.connect_get_namespaced_pod_exec(
                     pod_name,
                     namespace,
                     command=exec_command,
@@ -377,7 +383,9 @@ class KubernetesService:
                     # Use exec to read file content
                     logger.info(f"Reading {full_path} from pod")
                     exec_command = ['cat', full_path]
-                    resp = service.core_v1.connect_get_namespaced_pod_exec(
+                    logger.info(f"Executing command: {' '.join(exec_command)}")
+                    
+                    resp = service.core_api.connect_get_namespaced_pod_exec(
                         pod_name,
                         namespace,
                         command=exec_command,
@@ -388,9 +396,14 @@ class KubernetesService:
                     if "No such file or directory" in resp:
                         logger.warning(f"File {file_path} not found in pod")
                         continue
-                        
-                    file_contents[file_path] = resp
-                    logger.info(f"Successfully read file {file_path} ({len(resp)} bytes)")
+                    
+                    # Check if the response is empty
+                    if not resp.strip():
+                        logger.warning(f"File {file_path} exists but is empty")
+                        file_contents[file_path] = ""
+                    else:
+                        file_contents[file_path] = resp
+                        logger.info(f"Successfully read file {file_path} ({len(resp)} bytes)")
                 except Exception as e:
                     logger.error(f"Failed to read file {file_path}: {str(e)}")
             
@@ -398,6 +411,9 @@ class KubernetesService:
             # This would require more complex logic to handle directory structures
             # For now, we'll just log that it's not implemented
             logger.warning("World directory backup not implemented yet")
+            
+            logger.info(f"=== COPIED {len(file_contents)} FILES FROM POD {server_id} ===")
+            logger.info(f"Files copied: {list(file_contents.keys())}")
             
             return file_contents
             
