@@ -54,3 +54,51 @@ The Game Server Backend is a cloud-native application running on Azure that dyna
 4. System configures storage and mounts volumes
 5. Game server starts and becomes available
 6. Monitoring begins for activity and resource usage 
+
+flowchart TD
+    User[User/Client] --> API[API Layer]
+    
+    subgraph "API Layer"
+        API --> ServerRoutes[Server Routes]
+        API --> UserRoutes[User Routes]
+        API --> GameRoutes[Game Routes]
+        API --> BucketRoutes[B2 Storage Routes]
+    end
+    
+    subgraph "Service Layer"
+        ServerRoutes --> KubeService[Kubernetes Service]
+        BucketRoutes --> B2Service[B2 Storage Service]
+        KubeService --> DeployBuilder[K8s Deployment Builder]
+    end
+    
+    subgraph "Azure Infrastructure"
+        KubeService --> AKS[Azure Kubernetes Service]
+        AKS --> SystemPool[System Node Pool]
+        AKS --> GamePool[Game Node Pool]
+        AKS --> AzureLB[Azure Load Balancer]
+        AzureLB --> StaticIP[Static IP]
+    end
+    
+    subgraph "Storage"
+        B2Service --> B2[Backblaze B2 Storage]
+        AKS --> AzureStorage[Azure Storage]
+    end
+    
+    subgraph "Database"
+        API --> PostgreSQL[PostgreSQL Database]
+    end
+    
+    subgraph "Container Registry"
+        AKS --> ACR[Azure Container Registry]
+    end
+    
+    %% Deployment Flow
+    User -- "1. Request Server" --> API
+    API -- "2. Provision Server" --> KubeService
+    KubeService -- "3. Create Deployment" --> AKS
+    KubeService -- "4. Create Service with Static IP" --> AzureLB
+    B2Service -- "5. Configure Game Files" --> B2
+    AKS -- "6. Pull Game Image" --> ACR
+    AKS -- "7. Mount Storage" --> AzureStorage
+    AzureLB -- "8. Expose Server" --> User
+    KubeService -- "9. Monitor Activity" --> AKS 

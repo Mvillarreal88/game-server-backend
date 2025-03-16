@@ -285,6 +285,151 @@ class KubernetesService:
         
         return ip_name
 
+    @classmethod
+    def delete_deployment(cls, server_id, namespace="default"):
+        """Delete a game server deployment and its associated service"""
+        try:
+            logger.info(f"Deleting deployment and service for server {server_id} in namespace {namespace}")
+            
+            # Create an instance to use the initialized client
+            service = cls()
+            
+            # Delete the deployment
+            service.apps_api.delete_namespaced_deployment(
+                name=server_id,
+                namespace=namespace
+            )
+            logger.info(f"Deployment {server_id} deleted successfully")
+            
+            # Delete the associated service
+            service_name = f"{server_id}-svc"
+            service.core_api.delete_namespaced_service(
+                name=service_name,
+                namespace=namespace
+            )
+            logger.info(f"Service {service_name} deleted successfully")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to delete deployment {server_id}: {str(e)}")
+            raise
+
+    @classmethod
+    def copy_files_from_pod(cls, server_id, namespace="default", file_paths=None):
+        """
+        Copy files from a running pod to local storage
+        Returns a dictionary of {file_path: file_content}
+        """
+        try:
+            logger.info(f"Copying files from pod {server_id} in namespace {namespace}")
+            
+            # Create an instance to use the initialized client
+            service = cls()
+            
+            # Get pod name from deployment
+            pod_list = service.core_api.list_namespaced_pod(
+                namespace=namespace,
+                label_selector=f"app={server_id}"
+            )
+            
+            if not pod_list.items:
+                logger.error(f"No pods found for deployment {server_id}")
+                return {}
+            
+            pod_name = pod_list.items[0].metadata.name
+            logger.info(f"Found pod {pod_name} for deployment {server_id}")
+            
+            # Default file paths if none provided
+            if not file_paths:
+                file_paths = [
+                    "server.properties",
+                    "ops.json",
+                    "whitelist.json",
+                    "banned-players.json",
+                    "banned-ips.json"
+                ]
+            
+            # Copy each file
+            file_contents = {}
+            for file_path in file_paths:
+                try:
+                    # For Minecraft server, files are in /data directory
+                    full_path = f"/data/{file_path}"
+                    
+                    # Use exec command to read file content
+                    exec_command = [
+                        "/bin/sh",
+                        "-c",
+                        f"cat {full_path} 2>/dev/null || echo 'FILE_NOT_FOUND'"
+                    ]
+                    
+                    logger.info(f"Executing command to read {full_path}")
+                    resp = service.core_api.connect_get_namespaced_pod_exec(
+                        name=pod_name,
+                        namespace=namespace,
+                        command=exec_command,
+                        stderr=True,
+                        stdin=False,
+                        stdout=True,
+                        tty=False
+                    )
+                    
+                    if resp and "FILE_NOT_FOUND" not in resp:
+                        file_contents[file_path] = resp
+                        logger.info(f"Successfully read file {file_path}")
+                    else:
+                        logger.warning(f"File {file_path} not found or empty")
+                        
+                except Exception as e:
+                    logger.error(f"Failed to read file {file_path}: {str(e)}")
+            
+            # Special handling for world directory
+            # This would require more complex logic to handle directory structures
+            # For now, we'll just log that it's not implemented
+            logger.warning("World directory backup not implemented yet")
+            
+            return file_contents
+            
+        except Exception as e:
+            logger.error(f"Failed to copy files from pod {server_id}: {str(e)}")
+            raise
+
+    @classmethod
+    def scale_deployment(cls, server_id, namespace="default", replicas=0):
+        """
+        Scale a deployment to the specified number of replicas
+        Used primarily to pause (scale to 0) or resume (scale to 1) a server
+        """
+        try:
+            logger.info(f"Scaling deployment {server_id} to {replicas} replicas")
+            
+            # Create an instance to use the initialized client
+            service = cls()
+            
+            # Get the current deployment
+            deployment = service.apps_api.read_namespaced_deployment(
+                name=server_id,
+                namespace=namespace
+            )
+            
+            # Update the replica count
+            deployment.spec.replicas = replicas
+            
+            # Apply the update
+            service.apps_api.patch_namespaced_deployment(
+                name=server_id,
+                namespace=namespace,
+                body=deployment
+            )
+            
+            logger.info(f"Deployment {server_id} scaled to {replicas} replicas successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to scale deployment {server_id}: {str(e)}")
+            raise
+
     # TODO: Implement server activity check
     # def check_server_activity(self, server_id, namespace="default"):
     #     """Check if server has been inactive"""
