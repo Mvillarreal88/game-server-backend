@@ -58,7 +58,14 @@ class B2StorageService:
                     file_name=full_path
                 )
                 
-                logger.info(f"Successfully uploaded {file_path} for server {server_id}. File ID: {file_info.id}")
+                # Debug the file_info object to see what attributes are available
+                logger.info(f"File info type: {type(file_info)}")
+                logger.info(f"File info attributes: {dir(file_info)}")
+                
+                # Use file_version_id instead of id if available, or handle both cases
+                file_id = getattr(file_info, 'id', None) or getattr(file_info, 'file_id', None) or getattr(file_info, 'file_version_id', 'unknown')
+                
+                logger.info(f"Successfully uploaded {file_path} for server {server_id}. File ID: {file_id}")
                 
                 # Clean up temp file
                 os.unlink(temp_file.name)
