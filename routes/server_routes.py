@@ -237,7 +237,7 @@ def pause_server():
                 # Copy the tar file from the pod to the local temp directory
                 logger.info(f"Copying world backup from pod to local temp directory")
                 
-                # Use the Kubernetes API to copy the file
+                # Use the Kubernetes API to copy the file with binary support
                 exec_command = ['cat', '/tmp/world.tar.gz']
                 resp = stream(
                     service.core_api.connect_get_namespaced_pod_exec,
@@ -246,20 +246,20 @@ def pause_server():
                     command=exec_command,
                     stderr=True, stdin=False,
                     stdout=True, tty=False,
-                    _preload_content=False
+                    _preload_content=False,
+                    _binary=True  # Enable binary mode for proper handling of binary data
                 )
                 
                 # Wait for the command to complete
                 resp.run_forever()
                 
-                # Get the binary output - Fix the method call to use what's available in the API
-                # WSClient doesn't have read_stdout_bytes, we need to use read_all() but handle it properly
-                binary_output = resp.read_all()
+                # Get the binary output using the proper binary mode
+                world_data = resp.read_stdout()
                 
-                # Ensure we have binary data by encoding to bytes
-                # The output from read_all() is already a string, so we can encode it to bytes
-                # Use latin1 encoding as it can represent all byte values (0-255)
-                world_data = binary_output.encode('latin1')
+                # If the data is still a string (fallback), encode it properly
+                if isinstance(world_data, str):
+                    # Use ISO-8859-1 (latin1) encoding which preserves all byte values
+                    world_data = world_data.encode('iso-8859-1')
                 
                 # Write the binary data to the local file
                 with open(world_backup_path, 'wb') as f:
@@ -442,7 +442,7 @@ def resume_server():
                     )
                     resp.run_forever()
                     
-                    # Write the world backup to the pod
+                    # Write the world backup to the pod using binary mode
                     exec_command = ['sh', '-c', 'cat > /tmp/world.tar.gz']
                     resp = stream(
                         service.core_api.connect_get_namespaced_pod_exec,
@@ -451,10 +451,14 @@ def resume_server():
                         command=exec_command,
                         stderr=True, stdin=True,
                         stdout=True, tty=False,
-                        _preload_content=False
+                        _preload_content=False,
+                        _binary=True  # Enable binary mode for writing binary data
                     )
                     
                     # Write the binary data to stdin
+                    if isinstance(world_data, str):
+                        # If somehow we have a string, encode it properly
+                        world_data = world_data.encode('iso-8859-1')
                     resp.write_stdin(world_data)
                     
                     # Close stdin to signal we're done writing
