@@ -155,9 +155,10 @@ def pause_server():
     namespace = data.get("namespace", "default")
 
     try:
-        logger.info(f"Pausing server {server_id} in namespace {namespace}")
+        logger.info(f"=== PAUSING SERVER {server_id} IN NAMESPACE {namespace} ===")
         
         # Save files to B2 before pausing
+        logger.info(f"Initializing B2 storage service for file backup")
         b2_service = B2StorageService()
         
         # Get files from running container
@@ -168,27 +169,126 @@ def pause_server():
             "banned-players.json",
             "banned-ips.json"
         ]
+        logger.info(f"Preparing to save files: {files_to_save}")
         
         # Copy files from pod
+        logger.info(f"Copying files from pod {server_id}")
         file_contents = KubernetesService.copy_files_from_pod(
             server_id=server_id,
             namespace=namespace,
             file_paths=files_to_save
         )
         
+        # Log the files that were found
+        found_files = list(file_contents.keys())
+        logger.info(f"Found {len(found_files)} files in pod: {found_files}")
+        
         # Save files to B2
         saved_files = []
         for file_path, content in file_contents.items():
             if content:
+                logger.info(f"Saving file {file_path} ({len(content)} bytes) to B2")
                 b2_service.update_file(server_id, file_path, content)
                 saved_files.append(file_path)
-                logger.info(f"Saved file {file_path} for server {server_id}")
+                logger.info(f"Successfully saved file {file_path} for server {server_id}")
+            else:
+                logger.warning(f"File {file_path} has no content, skipping")
         
-        # TODO: Add special handling for world directory
-        logger.warning("World directory backup not implemented yet")
+        # Backup world directory
+        logger.info(f"Backing up world directory for server {server_id}")
+        try:
+            # Create a temporary directory for the world backup
+            import tempfile
+            import shutil
+            import os
+            import subprocess
+            from kubernetes.stream import stream
+            
+            with tempfile.TemporaryDirectory() as temp_dir:
+                world_backup_path = os.path.join(temp_dir, "world.tar.gz")
+                
+                # Get the pod name
+                service = KubernetesService()
+                pod_list = service.core_api.list_namespaced_pod(
+                    namespace=namespace,
+                    label_selector=f"app={server_id}"
+                )
+                
+                if not pod_list.items:
+                    logger.error(f"No pods found for server {server_id}")
+                    raise ValueError(f"No pods found for server {server_id}")
+                
+                pod_name = pod_list.items[0].metadata.name
+                
+                # Create a tar archive of the world directory in the pod
+                logger.info(f"Creating tar archive of world directory in pod {pod_name}")
+                exec_command = ['tar', '-czf', '/tmp/world.tar.gz', '-C', '/data', 'world']
+                resp = stream(
+                    service.core_api.connect_get_namespaced_pod_exec,
+                    pod_name,
+                    namespace,
+                    command=exec_command,
+                    stderr=True, stdin=False,
+                    stdout=True, tty=False,
+                    _preload_content=False
+                )
+                resp.run_forever()
+                
+                # Copy the tar file from the pod to the local temp directory
+                logger.info(f"Copying world backup from pod to local temp directory")
+                
+                # Use the Kubernetes API to copy the file
+                exec_command = ['cat', '/tmp/world.tar.gz']
+                resp = stream(
+                    service.core_api.connect_get_namespaced_pod_exec,
+                    pod_name,
+                    namespace,
+                    command=exec_command,
+                    stderr=True, stdin=False,
+                    stdout=True, tty=False,
+                    _preload_content=False
+                )
+                
+                # Wait for the command to complete
+                resp.run_forever()
+                
+                # Get the binary output
+                world_data = resp.read_all().encode('latin1')
+                
+                # Write the binary data to the local file
+                with open(world_backup_path, 'wb') as f:
+                    f.write(world_data)
+                
+                # Check if the file was created and has content
+                if os.path.exists(world_backup_path) and os.path.getsize(world_backup_path) > 0:
+                    logger.info(f"World backup created: {world_backup_path} ({os.path.getsize(world_backup_path)} bytes)")
+                    
+                    # Upload the world backup to B2
+                    logger.info(f"Uploading world backup to B2")
+                    with open(world_backup_path, 'rb') as f:
+                        world_data = f.read()
+                    
+                    # Convert binary data to base64 for storage
+                    import base64
+                    world_data_base64 = base64.b64encode(world_data).decode('utf-8')
+                    
+                    # Store the world data in B2
+                    b2_service.update_file(server_id, "world.tar.gz.b64", world_data_base64, is_binary=False)
+                    saved_files.append("world.tar.gz.b64")
+                    logger.info(f"Successfully uploaded world backup for server {server_id}")
+                else:
+                    logger.error(f"Failed to create world backup: {world_backup_path}")
+            
+        except Exception as world_backup_error:
+            logger.error(f"Failed to backup world directory: {str(world_backup_error)}")
         
         # Pause the server by scaling to 0 replicas
+        logger.info(f"Scaling deployment {server_id} to 0 replicas")
         KubernetesService.scale_deployment(server_id, namespace, 0)
+        logger.info(f"Deployment {server_id} scaled to 0 replicas")
+        
+        logger.info(f"=== SERVER {server_id} PAUSED SUCCESSFULLY ===")
+        logger.info(f"Saved {len(saved_files)} files: {saved_files}")
         
         return jsonify({
             "message": f"Server {server_id} paused successfully",
@@ -285,11 +385,107 @@ def resume_server():
             except Exception as e:
                 logger.warning(f"Could not list files in /data directory: {str(e)}")
             
+            # First, check if we have a world backup to restore
+            world_backup_file = "world.tar.gz.b64"
+            has_world_backup = world_backup_file in files_to_restore
+            
+            # If we have a world backup, restore it first
+            if has_world_backup:
+                try:
+                    logger.info(f"Found world backup, restoring it first")
+                    
+                    # Get the world backup from B2
+                    logger.info(f"Getting world backup from B2")
+                    world_data_base64 = b2_service.get_file(server_id, world_backup_file)
+                    
+                    # Decode the base64 data
+                    import base64
+                    import tempfile
+                    import os
+                    
+                    world_data = base64.b64decode(world_data_base64)
+                    
+                    # Create a temporary file for the world backup
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.tar.gz') as temp_file:
+                        temp_file_path = temp_file.name
+                        temp_file.write(world_data)
+                    
+                    logger.info(f"World backup saved to temporary file: {temp_file_path} ({len(world_data)} bytes)")
+                    
+                    # Copy the world backup to the pod
+                    logger.info(f"Copying world backup to pod {pod_name}")
+                    
+                    # First, copy the tar file to the pod
+                    with open(temp_file_path, 'rb') as f:
+                        world_data = f.read()
+                    
+                    # Create the /tmp directory in the pod if it doesn't exist
+                    exec_command = ['mkdir', '-p', '/tmp']
+                    resp = stream(
+                        service.core_api.connect_get_namespaced_pod_exec,
+                        pod_name,
+                        namespace,
+                        command=exec_command,
+                        stderr=True, stdin=False,
+                        stdout=True, tty=False,
+                        _preload_content=False
+                    )
+                    resp.run_forever()
+                    
+                    # Write the world backup to the pod
+                    exec_command = ['sh', '-c', 'cat > /tmp/world.tar.gz']
+                    resp = stream(
+                        service.core_api.connect_get_namespaced_pod_exec,
+                        pod_name,
+                        namespace,
+                        command=exec_command,
+                        stderr=True, stdin=True,
+                        stdout=True, tty=False,
+                        _preload_content=False
+                    )
+                    
+                    # Write the binary data to stdin
+                    resp.write_stdin(world_data)
+                    
+                    # Close stdin to signal we're done writing
+                    resp.close()
+                    
+                    logger.info(f"World backup copied to pod, extracting it")
+                    
+                    # Extract the world backup
+                    exec_command = ['sh', '-c', 'rm -rf /data/world && tar -xzf /tmp/world.tar.gz -C /data']
+                    resp = stream(
+                        service.core_api.connect_get_namespaced_pod_exec,
+                        pod_name,
+                        namespace,
+                        command=exec_command,
+                        stderr=True, stdin=False,
+                        stdout=True, tty=False,
+                        _preload_content=False
+                    )
+                    
+                    # Wait for the command to complete
+                    resp.run_forever()
+                    
+                    # Get the output
+                    output = resp.read_all()
+                    logger.info(f"World extraction output: {output}")
+                    
+                    # Clean up the temporary file
+                    os.unlink(temp_file_path)
+                    
+                    restored_files.append(world_backup_file)
+                    logger.info(f"Successfully restored world backup for server {server_id}")
+                    
+                except Exception as world_restore_error:
+                    logger.error(f"Failed to restore world backup: {str(world_restore_error)}")
+            
+            # Now restore the configuration files
             for file_path in files_to_restore:
                 try:
-                    # Skip directory entries
-                    if file_path.endswith('/'):
-                        logger.info(f"Skipping directory entry: {file_path}")
+                    # Skip directory entries and the world backup (already handled)
+                    if file_path.endswith('/') or file_path == world_backup_file:
+                        logger.info(f"Skipping file: {file_path}")
                         continue
                     
                     # Get the file content from B2

@@ -84,36 +84,51 @@ class B2StorageService:
             logger.error(f"Failed to get file {file_path}: {str(e)}")
             raise
 
-    def update_file(self, server_id, file_path, content):
+    def update_file(self, server_id, file_path, content, is_binary=False):
         """Update or create a file"""
         try:
             full_path = f"{server_id}/{file_path}"
-            data = content.encode('utf-8')
+            
+            # Handle binary vs text content
+            if is_binary:
+                data = content
+                logger.info(f"Preparing to upload binary file {full_path} ({len(data)} bytes) to B2 bucket {self.bucket.name}")
+            else:
+                data = content.encode('utf-8')
+                logger.info(f"Preparing to upload text file {full_path} ({len(data)} bytes) to B2 bucket {self.bucket.name}")
             
             # Create a temporary file with the content
             with tempfile.NamedTemporaryFile(delete=False) as temp_file:
                 temp_file.write(data)
                 temp_file.flush()
+                temp_file_path = temp_file.name
                 
-                logger.info(f"Uploading file {full_path} to B2 bucket {self.bucket.name}")
+                logger.info(f"Created temporary file at {temp_file_path}")
                 
                 # Upload the file to B2
-                file_info = self.bucket.upload_local_file(
-                    local_file=temp_file.name,
-                    file_name=full_path
-                )
+                logger.info(f"Uploading file {full_path} to B2 bucket {self.bucket.name}")
                 
-                # Debug the file_info object to see what attributes are available
-                logger.info(f"File info type: {type(file_info)}")
-                logger.info(f"File info attributes: {dir(file_info)}")
-                
-                # Use file_version_id instead of id if available, or handle both cases
-                file_id = getattr(file_info, 'id_', None) or getattr(file_info, 'id', None) or getattr(file_info, 'file_id', None) or getattr(file_info, 'file_version_id', 'unknown')
-                
-                logger.info(f"Successfully uploaded {file_path} for server {server_id}. File ID: {file_id}")
-                
-                # Clean up temp file
-                os.unlink(temp_file.name)
+                try:
+                    file_info = self.bucket.upload_local_file(
+                        local_file=temp_file_path,
+                        file_name=full_path
+                    )
+                    
+                    # Debug the file_info object to see what attributes are available
+                    logger.info(f"File info type: {type(file_info)}")
+                    logger.debug(f"File info attributes: {dir(file_info)}")
+                    
+                    # Use file_version_id instead of id if available, or handle both cases
+                    file_id = getattr(file_info, 'id_', None) or getattr(file_info, 'id', None) or getattr(file_info, 'file_id', None) or getattr(file_info, 'file_version_id', 'unknown')
+                    
+                    logger.info(f"Successfully uploaded {file_path} for server {server_id}. File ID: {file_id}")
+                except Exception as upload_error:
+                    logger.error(f"Error uploading file {full_path}: {str(upload_error)}")
+                    raise
+                finally:
+                    # Clean up temp file
+                    logger.debug(f"Cleaning up temporary file {temp_file_path}")
+                    os.unlink(temp_file_path)
                 
         except Exception as e:
             logger.error(f"Failed to update file {file_path} for server {server_id}: {str(e)}")

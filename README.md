@@ -12,7 +12,7 @@ A Flask-based backend service for managing game server deployments on Azure Kube
 
 ## Prerequisites
 
-- Python 3.12 or higher
+- Python 3.12 or higher ()
 - Azure CLI
 - kubectl
 - Azure subscription with AKS cluster
