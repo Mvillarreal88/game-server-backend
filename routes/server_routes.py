@@ -237,8 +237,8 @@ def pause_server():
                 # Copy the tar file from the pod to the local temp directory
                 logger.info(f"Copying world backup from pod to local temp directory")
                 
-                # Use the Kubernetes API to copy the file with binary support
-                exec_command = ['cat', '/tmp/world.tar.gz']
+                # Use the Kubernetes API to copy the file - use base64 encoding to handle binary data safely
+                exec_command = ['sh', '-c', 'base64 /tmp/world.tar.gz']
                 resp = stream(
                     service.core_api.connect_get_namespaced_pod_exec,
                     pod_name,
@@ -246,20 +246,18 @@ def pause_server():
                     command=exec_command,
                     stderr=True, stdin=False,
                     stdout=True, tty=False,
-                    _preload_content=False,
-                    _binary=True  # Enable binary mode for proper handling of binary data
+                    _preload_content=False
                 )
                 
                 # Wait for the command to complete
                 resp.run_forever()
                 
-                # Get the binary output using the proper binary mode
-                world_data = resp.read_stdout()
+                # Get the base64 encoded output
+                world_data_base64 = resp.read_all()
                 
-                # If the data is still a string (fallback), encode it properly
-                if isinstance(world_data, str):
-                    # Use ISO-8859-1 (latin1) encoding which preserves all byte values
-                    world_data = world_data.encode('iso-8859-1')
+                # Decode the base64 data to get the binary content
+                import base64
+                world_data = base64.b64decode(world_data_base64)
                 
                 # Write the binary data to the local file
                 with open(world_backup_path, 'wb') as f:
@@ -442,8 +440,11 @@ def resume_server():
                     )
                     resp.run_forever()
                     
-                    # Write the world backup to the pod using binary mode
-                    exec_command = ['sh', '-c', 'cat > /tmp/world.tar.gz']
+                    # Write the world backup to the pod using base64 encoding to handle binary data safely
+                    # First encode the binary data as base64
+                    world_data_base64 = base64.b64encode(world_data).decode('utf-8')
+                    
+                    exec_command = ['sh', '-c', 'base64 -d > /tmp/world.tar.gz']
                     resp = stream(
                         service.core_api.connect_get_namespaced_pod_exec,
                         pod_name,
@@ -451,15 +452,11 @@ def resume_server():
                         command=exec_command,
                         stderr=True, stdin=True,
                         stdout=True, tty=False,
-                        _preload_content=False,
-                        _binary=True  # Enable binary mode for writing binary data
+                        _preload_content=False
                     )
                     
-                    # Write the binary data to stdin
-                    if isinstance(world_data, str):
-                        # If somehow we have a string, encode it properly
-                        world_data = world_data.encode('iso-8859-1')
-                    resp.write_stdin(world_data)
+                    # Write the base64 encoded data to stdin
+                    resp.write_stdin(world_data_base64)
                     
                     # Close stdin to signal we're done writing
                     resp.close()
