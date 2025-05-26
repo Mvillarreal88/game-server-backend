@@ -252,8 +252,14 @@ def pause_server():
                 # Wait for the command to complete
                 resp.run_forever()
                 
-                # Get the binary output - Use bytes directly instead of encoding as latin1
-                world_data = resp.read_stdout_bytes()
+                # Get the binary output - Fix the method call to use what's available in the API
+                # WSClient doesn't have read_stdout_bytes, we need to use read_all() but handle it properly
+                binary_output = resp.read_all()
+                
+                # Ensure we have binary data by encoding to bytes
+                # The output from read_all() is already a string, so we can encode it to bytes
+                # Use latin1 encoding as it can represent all byte values (0-255)
+                world_data = binary_output.encode('latin1')
                 
                 # Write the binary data to the local file
                 with open(world_backup_path, 'wb') as f:
