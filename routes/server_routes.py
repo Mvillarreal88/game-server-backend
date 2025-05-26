@@ -220,6 +220,22 @@ def pause_server():
                 
                 pod_name = pod_list.items[0].metadata.name
                 
+                # First, check if the world directory exists and has content
+                logger.info(f"Checking if world directory exists in pod {pod_name}")
+                exec_command = ['ls', '-la', '/data/world']
+                resp = stream(
+                    service.core_api.connect_get_namespaced_pod_exec,
+                    pod_name,
+                    namespace,
+                    command=exec_command,
+                    stderr=True, stdin=False,
+                    stdout=True, tty=False,
+                    _preload_content=False
+                )
+                resp.run_forever()
+                world_ls_output = resp.read_all()
+                logger.info(f"World directory contents: {world_ls_output}")
+                
                 # Create a tar archive of the world directory in the pod
                 logger.info(f"Creating tar archive of world directory in pod {pod_name}")
                 exec_command = ['tar', '-czf', '/tmp/world.tar.gz', '-C', '/data', 'world']
@@ -233,6 +249,24 @@ def pause_server():
                     _preload_content=False
                 )
                 resp.run_forever()
+                tar_output = resp.read_all()
+                logger.info(f"Tar command output: {tar_output}")
+                
+                # Check if the tar file was created and its size
+                logger.info(f"Checking if tar file was created")
+                exec_command = ['ls', '-la', '/tmp/world.tar.gz']
+                resp = stream(
+                    service.core_api.connect_get_namespaced_pod_exec,
+                    pod_name,
+                    namespace,
+                    command=exec_command,
+                    stderr=True, stdin=False,
+                    stdout=True, tty=False,
+                    _preload_content=False
+                )
+                resp.run_forever()
+                tar_ls_output = resp.read_all()
+                logger.info(f"Tar file info: {tar_ls_output}")
                 
                 # Copy the tar file from the pod to the local temp directory
                 logger.info(f"Copying world backup from pod to local temp directory")
@@ -254,10 +288,17 @@ def pause_server():
                 
                 # Get the base64 encoded output
                 world_data_base64 = resp.read_all()
+                logger.info(f"Base64 output length: {len(world_data_base64)} characters")
+                logger.info(f"First 100 chars of base64: {world_data_base64[:100]}")
                 
                 # Decode the base64 data to get the binary content
                 import base64
-                world_data = base64.b64decode(world_data_base64)
+                try:
+                    world_data = base64.b64decode(world_data_base64)
+                    logger.info(f"Successfully decoded base64 data: {len(world_data)} bytes")
+                except Exception as decode_error:
+                    logger.error(f"Failed to decode base64 data: {decode_error}")
+                    raise
                 
                 # Write the binary data to the local file
                 with open(world_backup_path, 'wb') as f:
