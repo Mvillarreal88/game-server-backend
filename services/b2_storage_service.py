@@ -38,7 +38,7 @@ class B2StorageService:
             logger.error(f"Failed to list files for server {server_id}: {str(e)}")
             raise
 
-    def get_file(self, server_id, file_path):
+    def get_file(self, server_id, file_path, is_binary=False):
         """Get file content"""
         try:
             # Ensure we have the correct path format
@@ -61,7 +61,7 @@ class B2StorageService:
                 download.save_to(temp_file_path)
                 
                 # Read the content from the temporary file
-                with open(temp_file_path, 'r') as f:
+                with open(temp_file_path, 'rb' if is_binary else 'r') as f:
                     content = f.read()
                 
                 # Clean up the temporary file

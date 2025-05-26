@@ -252,8 +252,8 @@ def pause_server():
                 # Wait for the command to complete
                 resp.run_forever()
                 
-                # Get the binary output
-                world_data = resp.read_all().encode('latin1')
+                # Get the binary output - Use bytes directly instead of encoding as latin1
+                world_data = resp.read_stdout_bytes()
                 
                 # Write the binary data to the local file
                 with open(world_backup_path, 'wb') as f:
@@ -396,12 +396,16 @@ def resume_server():
                     
                     # Get the world backup from B2
                     logger.info(f"Getting world backup from B2")
-                    world_data_base64 = b2_service.get_file(server_id, world_backup_file)
+                    world_data_base64 = b2_service.get_file(server_id, world_backup_file, is_binary=True)
                     
                     # Decode the base64 data
                     import base64
                     import tempfile
                     import os
+                    
+                    # If we read the file as binary, we need to decode it to string first
+                    if isinstance(world_data_base64, bytes):
+                        world_data_base64 = world_data_base64.decode('utf-8')
                     
                     world_data = base64.b64decode(world_data_base64)
                     
