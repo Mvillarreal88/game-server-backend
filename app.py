@@ -30,6 +30,16 @@ settings.log_configuration()
 # Register the API blueprint
 app.register_blueprint(api)
 
+# Global error handlers
+@app.errorhandler(400)
+def handle_bad_request(e):
+    """Handle bad request errors with JSON response"""
+    logger.warning(f"Bad request: {str(e)}")
+    # Check if this is a request to our API endpoints
+    if request.path.startswith('/api/'):
+        return jsonify({"error": "No data provided"}), 400
+    return jsonify({"error": "Bad request"}), 400
+
 @app.route('/health')
 def health_check():
     """Health check endpoint for Azure App Service"""
@@ -40,7 +50,7 @@ def robots_txt():
     """Required for Azure App Service health checks"""
     return '', 200
 
-@app.route('/api/server/start-server', methods=['POST'])
+@app.route('/api/server/start-server-test', methods=['POST'])
 def start_server():
     """Start a new game server instance with improved validation and error handling"""
     logger.info("=== Start Server Request Received ===")
@@ -48,8 +58,13 @@ def start_server():
     
     try:
         # Validate request data
-        data = request.json
-        if not data:
+        try:
+            data = request.get_json(force=True)
+        except Exception:
+            logger.error("No JSON data received")
+            return jsonify({"error": "No data provided"}), 400
+            
+        if data is None:
             logger.error("No JSON data received")
             return jsonify({"error": "No data provided"}), 400
         
@@ -61,13 +76,9 @@ def start_server():
             namespace = validated_data['namespace']
             logger.info(f"Request validated: server_id={server_id}, package={package}, namespace={namespace}")
         except ValidationError as e:
-            return jsonify(ErrorHandler.handle_validation_error(logger, e)[0]), 400
+            error_response, status_code = ErrorHandler.handle_validation_error(logger, e)
+            return jsonify(error_response), status_code
         
-        # Get package configuration
-        if package not in GAME_PACKAGES:
-            logger.error(f"Invalid package: {package}")
-            return jsonify({"error": f"Invalid package: {package}"}), 400
-            
         config = GAME_PACKAGES[package]
         logger.info(f"Using package configuration: {config}")
             
@@ -101,6 +112,7 @@ def start_server():
     except Exception as e:
         error_response = ErrorHandler.log_and_format_error(logger, e, "Start server")
         return jsonify(error_response), 500
+
 
 if __name__ == '__main__':
     # Validate required settings before starting

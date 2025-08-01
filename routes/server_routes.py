@@ -1,6 +1,9 @@
 from flask import Blueprint, request, jsonify
 from services.kubernetes_service import KubernetesService
 from services.b2_storage_service import B2StorageService
+from utils.validators import StartServerSchema, StopServerSchema, PauseServerSchema, ResumeServerSchema
+from config.logging_config import ErrorHandler
+from marshmallow import ValidationError
 import logging
 import time
 
@@ -34,17 +37,41 @@ logger = logging.getLogger(__name__)
 
 @server_routes.route("/start-server", methods=["POST"])
 def start_server():
-    data = request.json
-    package = data.get("package")
-    server_id = data.get("server_id")
-    namespace = data.get("namespace", "default")
-
-    if package not in GAME_PACKAGES:
-        return jsonify({"error": f"Invalid package: {package}"}), 400
-
-    config = GAME_PACKAGES[package]
+    logger.info("=== Start Server Request Received ===")
     
     try:
+        # Validate request data
+        try:
+            data = request.get_json(force=True)
+        except Exception:
+            logger.error("No JSON data received")
+            return jsonify({"error": "No data provided"}), 400
+            
+        if data is None:
+            logger.error("No JSON data received")
+            return jsonify({"error": "No data provided"}), 400
+        
+        # Use marshmallow for validation
+        try:
+            validated_data = StartServerSchema().load(data)
+            package = validated_data['package']
+            server_id = validated_data['server_id']
+            namespace = validated_data['namespace']
+            logger.info(f"Request validated: server_id={server_id}, package={package}, namespace={namespace}")
+        except ValidationError as e:
+            error_response, status_code = ErrorHandler.handle_validation_error(logger, e)
+            return jsonify(error_response), status_code
+
+        config = GAME_PACKAGES[package]
+        logger.info(f"Using package configuration: {config}")
+        
+        # Initialize Kubernetes service
+        try:
+            k8s_service = KubernetesService()
+        except Exception as k8s_error:
+            error_response, status_code = ErrorHandler.handle_kubernetes_error(logger, k8s_error)
+            return jsonify(error_response), status_code
+            
         # Initialize B2 storage and check for existing files
         b2_service = B2StorageService()
         existing_files = b2_service.list_files(server_id)
@@ -94,8 +121,8 @@ def start_server():
         }), 200
         
     except Exception as e:
-        return jsonify({"error": f"Failed to start server: {str(e)}"}), 500
-
+        error_response = ErrorHandler.log_and_format_error(logger, e, "Start server")
+        return jsonify(error_response), 500
 
 @server_routes.route("/stop-server", methods=["POST"])
 def stop_server():

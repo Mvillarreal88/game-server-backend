@@ -36,7 +36,7 @@ class TestStartServerEndpoint:
     
     def test_start_server_no_data(self, client):
         """Test start server endpoint with no data."""
-        response = client.post('/api/server/start-server',
+        response = client.post('/api/server/start-server-test',
                               content_type='application/json')
         
         assert response.status_code == 400
@@ -46,7 +46,7 @@ class TestStartServerEndpoint:
     
     def test_start_server_invalid_json(self, client):
         """Test start server endpoint with invalid JSON."""
-        response = client.post('/api/server/start-server',
+        response = client.post('/api/server/start-server-test',
                               data='invalid json',
                               content_type='application/json')
         
@@ -56,7 +56,7 @@ class TestStartServerEndpoint:
         """Test start server endpoint with missing required fields."""
         data = {'package': 'standard'}  # Missing server_id
         
-        response = client.post('/api/server/start-server',
+        response = client.post('/api/server/start-server-test',
                               data=json.dumps(data),
                               content_type='application/json')
         
@@ -71,7 +71,7 @@ class TestStartServerEndpoint:
             'server_id': 'INVALID_SERVER_ID'  # Contains uppercase and underscore
         }
         
-        response = client.post('/api/server/start-server',
+        response = client.post('/api/server/start-server-test',
                               data=json.dumps(data),
                               content_type='application/json')
         
@@ -86,7 +86,7 @@ class TestStartServerEndpoint:
             'server_id': 'test-server'
         }
         
-        response = client.post('/api/server/start-server',
+        response = client.post('/api/server/start-server-test',
                               data=json.dumps(data),
                               content_type='application/json')
         
@@ -105,7 +105,7 @@ class TestStartServerEndpoint:
             'server_id': 'test-server'
         }
         
-        response = client.post('/api/server/start-server',
+        response = client.post('/api/server/start-server-test',
                               data=json.dumps(data),
                               content_type='application/json')
         
@@ -127,7 +127,7 @@ class TestStartServerEndpoint:
             'namespace': 'default'
         }
         
-        response = client.post('/api/server/start-server',
+        response = client.post('/api/server/start-server-test',
                               data=json.dumps(data),
                               content_type='application/json')
         
@@ -151,7 +151,7 @@ class TestStartServerEndpoint:
             'server_id': 'test-server'
         }
         
-        response = client.post('/api/server/start-server',
+        response = client.post('/api/server/start-server-test',
                               data=json.dumps(data),
                               content_type='application/json')
         

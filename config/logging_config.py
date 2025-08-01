@@ -157,9 +157,12 @@ class ErrorHandler:
         """
         logger.warning(f"Validation error: {str(error)}")
         
+        # Format the error message properly
+        error_details = str(error)
+        
         return {
             "error": "Validation failed",
-            "details": str(error),
+            "details": error_details,
             "type": "ValidationError"
         }, 400
     
@@ -177,19 +180,27 @@ class ErrorHandler:
         """
         logger.error(f"Kubernetes operation failed: {str(error)}", exc_info=True)
         
+        # Extract error details from different sources
+        error_details = str(error)
+        
+        # For ApiException objects, check if they have a _reason attribute
+        if hasattr(error, '_reason') and error._reason:
+            error_details = error._reason
+        
         # Map common Kubernetes errors to HTTP status codes
         status_code = 500
-        if "not found" in str(error).lower():
+        error_check = error_details.lower()
+        if "not found" in error_check:
             status_code = 404
-        elif "already exists" in str(error).lower():
+        elif "already exists" in error_check:
             status_code = 409
-        elif "forbidden" in str(error).lower():
+        elif "forbidden" in error_check:
             status_code = 403
-        elif "unauthorized" in str(error).lower():
+        elif "unauthorized" in error_check:
             status_code = 401
         
         return {
             "error": "Kubernetes operation failed",
-            "details": str(error),
+            "details": error_details,
             "type": "KubernetesError"
         }, status_code
