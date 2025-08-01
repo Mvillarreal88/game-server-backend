@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(source:*)",
+      "Bash(pip install:*)",
+      "Bash(test:*)",
+      "Bash(az account:*)",
+      "Bash(az aks get-credentials:*)",
+      "Bash(az login:*)",
+      "Bash(az logout:*)",
+      "Bash(kubectl config:*)",
+      "Bash(ls:*)",
+      "Bash(pkill:*)",
+      "Bash(cat:*)",
+      "Bash(claude auth status)",
+      "Bash(env)"
+    ],
+    "deny": []
+  }
+}
