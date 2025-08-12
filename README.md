@@ -87,6 +87,143 @@ game-server-backend/
 └── utils/ # Helper utilities
 └── kubernetes_deployment_builder.py # K8s YAML generation
 
+## Architecture
+
+### Infrastructure Overview
+
+```mermaid
+graph TB
+    subgraph "Azure Infrastructure"
+        subgraph "GameServerRG (Control Plane)"
+            AKS[AKS Cluster<br/>GameServerClusterProd]
+            ACR[Container Registry<br/>gameregistry.azurecr.io]
+            B2[B2 Cloud Storage<br/>Game Data Backup]
+        end
+        
+        subgraph "MC_GameServerRG_..._eastus (Node Resources)"
+            LB[Load Balancers]
+            PIP[Public IPs]
+            VM[Game Server VMs<br/>gamepool nodes]
+            NSG[Network Security Groups]
+        end
+    end
+
+    subgraph "Game Server Deployment Flow"
+        API[Flask API<br/>POST /api/server/start-server]
+        K8S[Kubernetes Service]
+        POD[Game Server Pod]
+        SVC[LoadBalancer Service]
+    end
+
+    API --> AKS
+    AKS --> VM
+    K8S --> POD
+    POD --> SVC
+    SVC --> LB
+    LB --> PIP
+    ACR --> POD
+    B2 <--> POD
+```
+
+### Request Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API as Flask API
+    participant B2 as B2 Storage
+    participant K8s as Kubernetes
+    participant Azure as Azure Resources
+
+    Client->>API: POST /api/server/start-server
+    API->>API: Validate request (Marshmallow)
+    
+    API->>B2: Check existing server files
+    alt No existing files
+        API->>B2: Create default config files
+    else Files exist
+        Note over API: Will restore from backup
+    end
+    
+    API->>K8s: Deploy game server pod
+    K8s->>Azure: Create VM in gamepool
+    K8s->>Azure: Create LoadBalancer service
+    Azure->>Azure: Allocate static public IP
+    Azure->>Azure: Configure DNS (server-id.eastus.cloudapp.azure.com)
+    
+    K8s-->>API: Deployment successful
+    Azure-->>API: IP address assigned
+    API-->>Client: Server connection info
+    
+    Note over Client, Azure: Player connects to game server
+```
+
+### Resource Group Architecture
+
+```mermaid
+graph LR
+    subgraph "GameServerRG (Main Resource Group)"
+        direction TB
+        AKS[AKS Cluster Control Plane]
+        ACR[Container Registry]
+        VNET[Virtual Network]
+        IAM[Identity & Access Management]
+    end
+    
+    subgraph "MC_GameServerRG_GameServerClusterProd_eastus"
+        direction TB
+        VMSS[Virtual Machine Scale Set<br/>gamepool nodes]
+        ALB[Azure Load Balancers]
+        PIPS[Static Public IPs]
+        DISK[Managed Disks]
+        NSG[Network Security Groups]
+        RT[Route Tables]
+    end
+    
+    AKS -.->|manages| VMSS
+    AKS -.->|creates| ALB
+    AKS -.->|allocates| PIPS
+    VMSS -->|hosts| POD[Game Server Pods]
+    POD -->|exposes via| ALB
+    
+    style GameServerRG fill:#e1f5fe
+    style MC_GameServerRG_GameServerClusterProd_eastus fill:#f3e5f5
+```
+
+### Game Server Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> Requested: API Call
+    Requested --> Validating: Marshmallow Schema
+    Validating --> BackupCheck: Valid Request
+    Validating --> [*]: Invalid Request (400)
+    
+    BackupCheck --> CreatingDefaults: No Existing Files
+    BackupCheck --> RestoringFiles: Files Found in B2
+    
+    CreatingDefaults --> Deploying: Default configs saved
+    RestoringFiles --> Deploying: Backup restored
+    
+    Deploying --> Starting: Pod Created
+    Starting --> IPAllocation: Container Running
+    IPAllocation --> Running: LoadBalancer Ready
+    
+    Running --> Pausing: User Request
+    Running --> Stopping: User Request
+    Running --> Failed: Health Check Failed
+    
+    Pausing --> BackingUp: Save world data
+    BackingUp --> Paused: Scale to 0 replicas
+    Paused --> Starting: Resume Request
+    
+    Stopping --> BackingUp
+    BackingUp --> Cleanup: Files saved to B2
+    Cleanup --> [*]: Resources deleted
+    
+    Failed --> BackingUp: Auto-recovery
+```
+
 ## API Endpoints
 
 ### Server Management
