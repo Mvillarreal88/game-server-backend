@@ -17,7 +17,8 @@
       "Bash(claude auth status)",
       "Bash(env)",
       "Bash(grep:*)",
-      "Bash(unzip:*)"
+      "Bash(unzip:*)",
+      "Bash(pytest:*)"
     ],
     "deny": []
   }
