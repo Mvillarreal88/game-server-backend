@@ -7,38 +7,76 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Import Key Vault service (with fallback if not available)
+try:
+    from services.key_vault_service import key_vault_service
+    KEYVAULT_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Key Vault service not available: {e}")
+    key_vault_service = None
+    KEYVAULT_AVAILABLE = False
+
 class Settings:
     """Application settings with environment variable support and validation."""
     
     def __init__(self):
-        """Initialize settings from environment variables."""
-        # Environment
+        """Initialize settings from environment variables and Key Vault."""
+        # Environment (always from env vars)
         self.ENVIRONMENT: str = os.getenv('ENVIRONMENT', 'development')
         self.PORT: int = int(os.getenv('PORT', '8000' if self.ENVIRONMENT == 'production' else '5000'))
         
-        # Azure Configuration
-        self.AZURE_SUBSCRIPTION_ID: Optional[str] = os.getenv('AZURE_SUBSCRIPTION_ID')
+        # Load secrets from Key Vault or environment variables
+        self._load_secrets()
+        
+        # Non-sensitive configuration (can stay as env vars)
         self.AZURE_RESOURCE_GROUP: str = os.getenv('AZURE_RESOURCE_GROUP_NAME', 'GameServerRG')
-        
-        # AKS Configuration
-        self.AKS_CLUSTER_URL: Optional[str] = os.getenv('AKS_CLUSTER_URL')
-        self.AKS_SERVER_ID: Optional[str] = os.getenv('AKS_SERVER_ID')
-        self.AKS_CLUSTER_CA_CERT: Optional[str] = os.getenv('AKS_CLUSTER_CA_CERT')
-        
-        # B2 Storage Configuration
-        self.B2_KEY_ID: Optional[str] = os.getenv('B2_KEY_ID')
-        self.B2_KEY_NAME: Optional[str] = os.getenv('B2_KEY_NAME')
-        self.B2_APP_KEY: Optional[str] = os.getenv('B2_APP_KEY')
         self.B2_BUCKET_NAME: str = os.getenv('B2_BUCKET_NAME', 'mc-test-v1')
-        
-        # Kubernetes Configuration
-        self.KUBECONFIG_CONTENT: Optional[str] = os.getenv('KUBECONFIG_CONTENT')
         
         # Default Azure Resource Groups (avoid hardcoding)
         self.DEFAULT_MC_RESOURCE_GROUP: str = os.getenv(
             'MC_RESOURCE_GROUP', 
             'MC_GameServerRG_GameServerClusterProd_eastus'
         )
+    
+    def _load_secrets(self):
+        """Load sensitive configuration from Key Vault with environment variable fallbacks."""
+        # Define secret mappings: {key_vault_secret_name: env_var_fallback}
+        secret_mappings = {
+            'azure-subscription-id': 'AZURE_SUBSCRIPTION_ID',
+            'aks-cluster-url': 'AKS_CLUSTER_URL', 
+            'aks-server-id': 'AKS_SERVER_ID',
+            'aks-cluster-ca-cert': 'AKS_CLUSTER_CA_CERT',
+            'b2-key-id': 'B2_KEY_ID',
+            'b2-key-name': 'B2_KEY_NAME',
+            'b2-app-key': 'B2_APP_KEY',
+            'kubeconfig-content': 'KUBECONFIG_CONTENT'
+        }
+        
+        if KEYVAULT_AVAILABLE and key_vault_service and key_vault_service.is_available():
+            logger.info("Loading secrets from Azure Key Vault")
+            secrets = key_vault_service.get_multiple_secrets(secret_mappings)
+            
+            # Assign secrets to instance variables
+            self.AZURE_SUBSCRIPTION_ID = secrets.get('azure-subscription-id')
+            self.AKS_CLUSTER_URL = secrets.get('aks-cluster-url')
+            self.AKS_SERVER_ID = secrets.get('aks-server-id')
+            self.AKS_CLUSTER_CA_CERT = secrets.get('aks-cluster-ca-cert')
+            self.B2_KEY_ID = secrets.get('b2-key-id')
+            self.B2_KEY_NAME = secrets.get('b2-key-name')
+            self.B2_APP_KEY = secrets.get('b2-app-key')
+            self.KUBECONFIG_CONTENT = secrets.get('kubeconfig-content')
+            
+        else:
+            logger.info("Key Vault not available, using environment variables")
+            # Fallback to environment variables
+            self.AZURE_SUBSCRIPTION_ID = os.getenv('AZURE_SUBSCRIPTION_ID')
+            self.AKS_CLUSTER_URL = os.getenv('AKS_CLUSTER_URL')
+            self.AKS_SERVER_ID = os.getenv('AKS_SERVER_ID')
+            self.AKS_CLUSTER_CA_CERT = os.getenv('AKS_CLUSTER_CA_CERT')
+            self.B2_KEY_ID = os.getenv('B2_KEY_ID')
+            self.B2_KEY_NAME = os.getenv('B2_KEY_NAME')
+            self.B2_APP_KEY = os.getenv('B2_APP_KEY')
+            self.KUBECONFIG_CONTENT = os.getenv('KUBECONFIG_CONTENT')
     
     def validate_required_settings(self) -> list[str]:
         """
