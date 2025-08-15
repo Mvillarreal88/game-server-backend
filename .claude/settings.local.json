@@ -18,8 +18,15 @@
       "Bash(env)",
       "Bash(grep:*)",
       "Bash(unzip:*)",
-      "Bash(pytest:*)"
+      "Bash(pytest:*)",
+      "Bash(echo:*)",
+      "Bash(az ad signed-in-user show:*)",
+      "Bash(az role assignment create:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git config:*)"
     ],
-    "deny": []
+    "deny": [],
+    "defaultMode": "acceptEdits"
   }
 }
