@@ -76,6 +76,7 @@ class TestSettings:
         'B2_KEY_ID': 'test-key-id'
         # Missing other required production settings
     }, clear=True)
+    @patch('config.settings.KEYVAULT_AVAILABLE', False)  # Disable Key Vault for this test
     def test_validate_required_settings_production_missing(self):
         """Test production settings validation with missing values."""
         settings = Settings()
