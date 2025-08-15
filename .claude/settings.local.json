@@ -18,7 +18,8 @@
       "Bash(env)",
       "Bash(grep:*)",
       "Bash(unzip:*)",
-      "Bash(pytest:*)"
+      "Bash(pytest:*)",
+      "Bash(git push:*)"
     ],
     "deny": []
   }
