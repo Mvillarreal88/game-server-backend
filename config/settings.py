@@ -52,7 +52,8 @@ class Settings:
             'kubeconfig-content': 'KUBECONFIG_CONTENT'
         }
         
-        if KEYVAULT_AVAILABLE and key_vault_service and key_vault_service.is_available():
+        if (KEYVAULT_AVAILABLE and key_vault_service and key_vault_service.is_available() 
+            and self.ENVIRONMENT == 'production'):
             logger.info("Loading secrets from Azure Key Vault")
             secrets = key_vault_service.get_multiple_secrets(secret_mappings)
             
@@ -67,7 +68,10 @@ class Settings:
             self.KUBECONFIG_CONTENT = secrets.get('kubeconfig-content')
             
         else:
-            logger.info("Key Vault not available, using environment variables")
+            if self.ENVIRONMENT == 'production':
+                logger.info("Key Vault not available, using environment variables")
+            else:
+                logger.info("Development mode, using environment variables")
             # Fallback to environment variables
             self.AZURE_SUBSCRIPTION_ID = os.getenv('AZURE_SUBSCRIPTION_ID')
             self.AKS_CLUSTER_URL = os.getenv('AKS_CLUSTER_URL')
