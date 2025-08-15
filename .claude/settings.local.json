@@ -19,8 +19,18 @@
       "Bash(grep:*)",
       "Bash(unzip:*)",
       "Bash(pytest:*)",
+<<<<<<< HEAD
       "Bash(git push:*)"
+=======
+      "Bash(echo:*)",
+      "Bash(az ad signed-in-user show:*)",
+      "Bash(az role assignment create:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git config:*)"
+>>>>>>> 6bb5e0971be18d32c214fce8e990d5f108ad24c7
     ],
-    "deny": []
+    "deny": [],
+    "defaultMode": "acceptEdits"
   }
 }
