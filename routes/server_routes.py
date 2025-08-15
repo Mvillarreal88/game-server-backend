@@ -35,6 +35,229 @@ GAME_PACKAGES = {
 
 logger = logging.getLogger(__name__)
 
+@server_routes.route("/", methods=["GET"])
+def list_servers():
+    """List all running game servers across all namespaces."""
+    logger.info("=== List Servers Request Received ===")
+    
+    try:
+        # Initialize Kubernetes service
+        try:
+            k8s_service = KubernetesService()
+        except Exception as k8s_error:
+            error_response, status_code = ErrorHandler.handle_kubernetes_error(logger, k8s_error)
+            return jsonify(error_response), status_code
+        
+        # Get all deployments with game server labels
+        deployments = k8s_service.apps_api.list_deployment_for_all_namespaces(
+            label_selector="app"
+        )
+        
+        servers = []
+        for deployment in deployments.items:
+            # Extract server information
+            server_id = deployment.metadata.labels.get("app")
+            namespace = deployment.metadata.namespace
+            
+            # Skip non-game server deployments (safety check)
+            if not server_id or not namespace:
+                continue
+                
+            # Get service information for IP/port
+            service_info = None
+            try:
+                service = k8s_service.core_api.read_namespaced_service(
+                    name=f"{server_id}-svc",
+                    namespace=namespace
+                )
+                
+                external_ip = None
+                if service.status.load_balancer and service.status.load_balancer.ingress:
+                    external_ip = service.status.load_balancer.ingress[0].ip
+                    
+                service_info = {
+                    "external_ip": external_ip,
+                    "port": service.spec.ports[0].port if service.spec.ports else None,
+                    "dns_name": f"{server_id}-dns.eastus.cloudapp.azure.com" if external_ip else None
+                }
+            except Exception:
+                # Service might not exist or be ready yet
+                service_info = {"external_ip": None, "port": None, "dns_name": None}
+            
+            # Determine server status
+            ready_replicas = deployment.status.ready_replicas or 0
+            desired_replicas = deployment.spec.replicas or 0
+            
+            if ready_replicas == desired_replicas and ready_replicas > 0:
+                status = "running"
+            elif ready_replicas == 0 and desired_replicas == 0:
+                status = "paused" 
+            elif ready_replicas < desired_replicas:
+                status = "starting"
+            else:
+                status = "unknown"
+            
+            server_info = {
+                "server_id": server_id,
+                "namespace": namespace,
+                "status": status,
+                "replicas": {
+                    "ready": ready_replicas,
+                    "desired": desired_replicas
+                },
+                "created": deployment.metadata.creation_timestamp.isoformat() if deployment.metadata.creation_timestamp else None,
+                "connection_info": service_info
+            }
+            servers.append(server_info)
+        
+        logger.info(f"Found {len(servers)} game servers")
+        return jsonify({
+            "servers": servers,
+            "total_count": len(servers)
+        }), 200
+        
+    except Exception as e:
+        error_response = ErrorHandler.log_and_format_error(logger, e, "List servers")
+        return jsonify(error_response), 500
+
+@server_routes.route("/status/<server_id>", methods=["GET"])
+def get_server_status(server_id):
+    """Get detailed status information for a specific game server."""
+    logger.info(f"=== Get Server Status Request: {server_id} ===")
+    
+    try:
+        # Initialize Kubernetes service
+        try:
+            k8s_service = KubernetesService()
+        except Exception as k8s_error:
+            error_response, status_code = ErrorHandler.handle_kubernetes_error(logger, k8s_error)
+            return jsonify(error_response), status_code
+        
+        # Search for deployment across all namespaces
+        deployments = k8s_service.apps_api.list_deployment_for_all_namespaces(
+            label_selector=f"app={server_id}"
+        )
+        
+        if not deployments.items:
+            logger.warning(f"Server {server_id} not found")
+            return jsonify({
+                "error": "Server not found",
+                "details": f"No deployment found with server_id: {server_id}",
+                "server_id": server_id
+            }), 404
+        
+        # Get the first (should be only) deployment
+        deployment = deployments.items[0]
+        namespace = deployment.metadata.namespace
+        
+        # Get detailed deployment information
+        ready_replicas = deployment.status.ready_replicas or 0
+        desired_replicas = deployment.spec.replicas or 0
+        available_replicas = deployment.status.available_replicas or 0
+        
+        # Determine detailed status
+        if ready_replicas == desired_replicas and ready_replicas > 0:
+            status = "running"
+        elif ready_replicas == 0 and desired_replicas == 0:
+            status = "paused"
+        elif ready_replicas < desired_replicas:
+            status = "starting"
+        elif available_replicas < ready_replicas:
+            status = "degraded"
+        else:
+            status = "unknown"
+        
+        # Get service information
+        service_info = {"external_ip": None, "port": None, "dns_name": None}
+        try:
+            service = k8s_service.core_api.read_namespaced_service(
+                name=f"{server_id}-svc",
+                namespace=namespace
+            )
+            
+            external_ip = None
+            if service.status.load_balancer and service.status.load_balancer.ingress:
+                external_ip = service.status.load_balancer.ingress[0].ip
+                
+            service_info = {
+                "external_ip": external_ip,
+                "port": service.spec.ports[0].port if service.spec.ports else None,
+                "dns_name": f"{server_id}-dns.eastus.cloudapp.azure.com" if external_ip else None,
+                "service_type": service.spec.type
+            }
+        except Exception as service_error:
+            logger.warning(f"Could not get service info for {server_id}: {str(service_error)}")
+        
+        # Get pod information
+        pods = []
+        try:
+            pod_list = k8s_service.core_api.list_namespaced_pod(
+                namespace=namespace,
+                label_selector=f"app={server_id}"
+            )
+            
+            for pod in pod_list.items:
+                pod_info = {
+                    "name": pod.metadata.name,
+                    "status": pod.status.phase,
+                    "ready": False,
+                    "restarts": 0,
+                    "created": pod.metadata.creation_timestamp.isoformat() if pod.metadata.creation_timestamp else None
+                }
+                
+                # Check container status
+                if pod.status.container_statuses:
+                    container = pod.status.container_statuses[0]
+                    pod_info["ready"] = container.ready
+                    pod_info["restarts"] = container.restart_count
+                    
+                    if container.state.waiting:
+                        pod_info["status"] = f"waiting: {container.state.waiting.reason}"
+                    elif container.state.terminated:
+                        pod_info["status"] = f"terminated: {container.state.terminated.reason}"
+                
+                pods.append(pod_info)
+                
+        except Exception as pod_error:
+            logger.warning(f"Could not get pod info for {server_id}: {str(pod_error)}")
+        
+        # Get resource information
+        container_spec = deployment.spec.template.spec.containers[0] if deployment.spec.template.spec.containers else None
+        resources = {
+            "requests": {},
+            "limits": {}
+        }
+        
+        if container_spec and hasattr(container_spec, 'resources') and container_spec.resources:
+            if isinstance(container_spec.resources, dict):
+                if container_spec.resources.get("requests"):
+                    resources["requests"] = container_spec.resources["requests"]
+                if container_spec.resources.get("limits"):
+                    resources["limits"] = container_spec.resources["limits"]
+        
+        server_status = {
+            "server_id": server_id,
+            "namespace": namespace,
+            "status": status,
+            "replicas": {
+                "desired": desired_replicas,
+                "ready": ready_replicas,
+                "available": available_replicas
+            },
+            "created": deployment.metadata.creation_timestamp.isoformat() if deployment.metadata.creation_timestamp else None,
+            "connection_info": service_info,
+            "pods": pods,
+            "resources": resources,
+            "image": container_spec.image if container_spec and hasattr(container_spec, 'image') else "unknown"
+        }
+        
+        logger.info(f"Retrieved status for server {server_id}: {status}")
+        return jsonify(server_status), 200
+        
+    except Exception as e:
+        error_response = ErrorHandler.log_and_format_error(logger, e, "Get server status")
+        return jsonify(error_response), 500
+
 @server_routes.route("/start-server", methods=["POST"])
 def start_server():
     logger.info("=== Start Server Request Received ===")
